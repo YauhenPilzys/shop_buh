@@ -123,7 +123,7 @@ class Income(models.Model):
 
 class Expense(models.Model):
     #Расход
-    client = models.ForeignKey("Client", on_delete=models.CASCADE, verbose_name="Клиент")
+    client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Клиент")
     expense_number = models.CharField("Номер по накладной", max_length=100)
     expense_price = models.DecimalField("Цена продажи", max_digits=10, decimal_places=2)
     expense_nds = models.DecimalField("Цена продажи с НДС ", max_digits=10, decimal_places=2)

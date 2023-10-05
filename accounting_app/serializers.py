@@ -96,7 +96,6 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
 
 class StockSerializer(serializers.ModelSerializer):
-   # product_id = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), source='product', write_only=True)
     product = ProductSerializer()
     class Meta:
         model = Stock
@@ -105,6 +104,7 @@ class StockSerializer(serializers.ModelSerializer):
 
 
 class StockCreateSerializer(serializers.ModelSerializer):
+    #product = ProductSerializer() #в пост только ID но в PATCH полный список
     class Meta:
         model = Stock
         fields = '__all__'
@@ -158,10 +158,53 @@ class IncomeDetailSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+
+
+class ExpenseCreateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Expense
+        fields = '__all__'
+
+
+
+class ExpenseDetailSerializer(serializers.ModelSerializer):
+    client = ClientSerializer()
+    bank = BankSerializer()
+
+
+    class Meta:
+        model = Expense_item
+        fields = '__all__'
+
+
+
+
 class Expense_itemSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense_item
         fields = '__all__'
+
+class Expense_itemDetailSerializer(serializers.ModelSerializer):
+    product = ProductSerializer()
+    group = GroupSerializer()
+    expense = ExpenseSerializer()
+
+
+    class Meta:
+        model = Expense_item
+        fields = '__all__'
+
+class Expense_itemCreateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Expense_item
+        fields = '__all__'
+
+
+
+
+
 
 
 
@@ -171,6 +214,24 @@ class RetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Retail
         fields = '__all__'
+
+
+
+class RetailCreateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Retail
+        fields = '__all__'
+
+
+class RetailDetailSerializer(serializers.ModelSerializer):
+    product = ProductSerializer()
+    group = GroupSerializer()
+
+    class Meta:
+        model = Retail
+        fields = '__all__'
+
 
 
 

@@ -5,7 +5,8 @@ from .serializers import ProductSerializer, ClientSerializer, ProviderSerializer
     BankSerializer, ExpenseSerializer, StockSerializer, Price_changeSerializer, InvoiceCreateSerializer, \
     ClientCreateSerializer, ClientDetailSerializer, ProviderCreateSerializer, \
     ProviderDetailSerializer, StockCreateSerializer, StockDetailSerializer, IncomeSerializer, IncomeCreateSerializer, \
-    IncomeDetailSerializer, Expense_itemSerializer, RetailSerializer
+    IncomeDetailSerializer, Expense_itemSerializer, RetailSerializer, ExpenseCreateSerializer, ExpenseDetailSerializer, \
+    Expense_itemCreateSerializer, Expense_itemDetailSerializer, RetailCreateSerializer, RetailDetailSerializer
 
 from rest_framework import generics
 from django.shortcuts import get_object_or_404
@@ -63,7 +64,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 
 
-class ClientViewSet(viewsets.ModelViewSet):
+class ClientViewSet(viewsets.ModelViewSet):  #справочник
     queryset = Client.objects.all().order_by('-id')
     serializer_class = ClientSerializer
     filter_backends = [filters.SearchFilter]
@@ -77,7 +78,7 @@ class ClientViewSet(viewsets.ModelViewSet):
 
 
 
-class ProductViewSet(viewsets.ModelViewSet):
+class ProductViewSet(viewsets.ModelViewSet):  #справочник
     queryset = Product.objects.all().order_by('-id')
     serializer_class = ProductSerializer
     filter_backends = [filters.SearchFilter]
@@ -89,7 +90,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 
-class GroupViewSet(viewsets.ModelViewSet):
+class GroupViewSet(viewsets.ModelViewSet): #справочник
     queryset = Group.objects.all().order_by('-id')
     serializer_class = GroupSerializer
     filter_backends = [filters.SearchFilter]
@@ -119,7 +120,7 @@ class IncomeViewSet(viewsets.ModelViewSet):
 
 
 
-class BankViewSet(viewsets.ModelViewSet):
+class BankViewSet(viewsets.ModelViewSet): #справочник
     queryset = Bank.objects.all().order_by('-id')
     serializer_class = BankSerializer
     filter_backends = [filters.SearchFilter]
@@ -136,6 +137,27 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['']
     pagination_class = APIListPagination
+
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ExpenseCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
+        return ExpenseDetailSerializer
+
+
+
+class Expense_itemViewSet(viewsets.ModelViewSet):
+    queryset = Expense_item.objects.all().order_by('-id')
+    serializer_class = Expense_itemSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['']
+    pagination_class = APIListPagination
+
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return Expense_itemCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
+        return Expense_itemDetailSerializer
 
 
 class StockViewSet(viewsets.ModelViewSet):
@@ -172,18 +194,11 @@ class StockViewSet(viewsets.ModelViewSet):
 
 
 
+
+
 class Price_changeViewSet(viewsets.ModelViewSet):
     queryset = Price_change.objects.all().order_by('-id')
     serializer_class = Price_changeSerializer
-    filter_backends = [filters.SearchFilter]
-    search_fields = ['']
-    pagination_class = APIListPagination
-
-
-
-class Expense_itemViewSet(viewsets.ModelViewSet):
-    queryset = Expense_item.objects.all().order_by('-id')
-    serializer_class = Expense_itemSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['']
     pagination_class = APIListPagination
@@ -196,3 +211,8 @@ class RetailViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['']
     pagination_class = APIListPagination
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return RetailCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
+        return RetailDetailSerializer
