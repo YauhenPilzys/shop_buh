@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change
+from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item, \
+    Retail
 
 
 class BankSerializer(serializers.ModelSerializer):
@@ -9,6 +10,7 @@ class BankSerializer(serializers.ModelSerializer):
 
 
 class ClientSerializer(serializers.ModelSerializer):
+    bank = BankSerializer()
     class Meta:
         model = Client
         fields = '__all__'
@@ -94,9 +96,12 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
 
 class StockSerializer(serializers.ModelSerializer):
+   # product_id = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), source='product', write_only=True)
+    product = ProductSerializer()
     class Meta:
         model = Stock
         fields = '__all__'
+
 
 
 class StockCreateSerializer(serializers.ModelSerializer):
@@ -105,9 +110,13 @@ class StockCreateSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+
+
+
 class StockDetailSerializer(serializers.ModelSerializer):
+    #Вывод всех продуктов в GET запросе
     product = ProductSerializer()
-    invoice = InvoiceSerializer()
+    #invoice = InvoiceSerializer()
 
     class Meta:
         model = Stock
@@ -118,6 +127,51 @@ class Price_changeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Price_change
         fields = '__all__'
+
+
+
+class IncomeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Income
+        fields = '__all__'
+
+
+
+
+class IncomeCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Income
+        fields = '__all__'
+
+
+
+
+
+class IncomeDetailSerializer(serializers.ModelSerializer):
+    #Вывод всех продуктов в GET запросе
+    product = ProductSerializer()
+    invoice = InvoiceSerializer()
+
+    class Meta:
+        model = Income
+        fields = '__all__'
+
+
+class Expense_itemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Expense_item
+        fields = '__all__'
+
+
+
+
+
+class RetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Retail
+        fields = '__all__'
+
 
 
 

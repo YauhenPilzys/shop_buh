@@ -20,7 +20,6 @@ from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import routers
-
 from accounting_app import views
 from accounting_app.views import *
 
@@ -30,10 +29,7 @@ schema_view = get_schema_view(
     openapi.Info(
         title="API for SHOP",
         default_version='v1',
-        description="Your API Description",
-
-        contact=openapi.Contact(email="contact@yourapp.com"),
-        license=openapi.License(name="Your License"),
+        description="MY API for SHOP",
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
@@ -49,8 +45,12 @@ router.register(r'groups', GroupViewSet)
 router.register(r'invoices', InvoiceViewSet)
 router.register(r'banks', BankViewSet)
 router.register(r'expenses', ExpenseViewSet)
+router.register(r'expenses_item', Expense_itemViewSet)
 router.register(r'stocks', StockViewSet)
 router.register(r'prices_change', Price_changeViewSet)
+router.register(r'incomes', IncomeViewSet)
+router.register(r'retails', RetailViewSet)
+
 
 
 
