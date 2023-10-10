@@ -88,11 +88,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
 
 
-class ExpenseSerializer(serializers.ModelSerializer):
-    clients = ClientSerializer()
-    class Meta:
-        model = Expense
-        fields = '__all__'
+
 
 
 class StockSerializer(serializers.ModelSerializer):
@@ -130,6 +126,22 @@ class Price_changeSerializer(serializers.ModelSerializer):
 
 
 
+class Price_changeDetailSerializer(serializers.ModelSerializer):
+    product = ProductSerializer()
+
+
+    class Meta:
+        model = Price_change
+        fields = '__all__'
+
+
+class Price_changeCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Price_change
+        fields = '__all__'
+
+
+
 class IncomeSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -160,6 +172,16 @@ class IncomeDetailSerializer(serializers.ModelSerializer):
 
 
 
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    client = ClientSerializer()
+    class Meta:
+        model = Expense
+        fields = '__all__'
+
+
+
+
 class ExpenseCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -170,12 +192,14 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
 
 class ExpenseDetailSerializer(serializers.ModelSerializer):
     client = ClientSerializer()
-    bank = BankSerializer()
+
 
 
     class Meta:
-        model = Expense_item
+        model = Expense
         fields = '__all__'
+
+
 
 
 

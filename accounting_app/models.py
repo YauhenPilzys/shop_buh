@@ -43,13 +43,9 @@ class Provider(models.Model):
 
 
 
-
-
-
 class Product(models.Model):
-    #Продукты(товар)справочник
+    #Продукты(товар) справочник
     product_name = models.CharField("Название", max_length=255)
-    product_allowance = models.DecimalField("Надбавка", max_digits=10, decimal_places=2)
     product_group = models.ForeignKey("group", on_delete=models.CASCADE, blank=True, null=True, verbose_name="Группа")
     product_unit = models.CharField("Единица измерения", max_length=10)
 
@@ -106,7 +102,7 @@ class Income(models.Model):
     product_country = models.CharField("Страна товара", max_length=255)
     product_barcode = models.CharField("Штрихкод товара", max_length=255)
     income_purchase_price = models.DecimalField("Закупочная цена", max_digits=10, decimal_places=2)
-    income_nds = models.PositiveIntegerField("НДС", default=0)
+    income_vat = models.PositiveIntegerField("НДС", default=0)
     total_price_income = models. DecimalField("Полная цена с ндс", max_digits=10, decimal_places=2)
 
 
@@ -115,7 +111,7 @@ class Income(models.Model):
         verbose_name_plural = "Приходы"
 
     def __str__(self):
-        return f"Пришел товар:{self.product} в количестве {self.income_quantity}  "
+        return f"Получили товар :{self.product} в количестве {self.income_quantity}  "
 
 
 
@@ -125,8 +121,9 @@ class Expense(models.Model):
     #Расход
     client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Клиент")
     expense_number = models.CharField("Номер по накладной", max_length=100)
-    expense_price = models.DecimalField("Цена продажи", max_digits=10, decimal_places=2)
-    expense_nds = models.DecimalField("Цена продажи с НДС ", max_digits=10, decimal_places=2)
+    expense_price = models.DecimalField("Стоимость", max_digits=10, decimal_places=2)
+    expense_price_allowance = models.DecimalField("Стоимость с надбавкой", max_digits=10, decimal_places=2)
+    expense_vat = models.DecimalField("Сумма НДС ", max_digits=10, decimal_places=2)
     expense_date = models.DateField("Дата продажи",  blank=False)
     #expense procurations number номер доверенности могут быть пустые
     #дата доверенности   могут быть пустые
@@ -138,42 +135,58 @@ class Expense(models.Model):
         verbose_name_plural = "Расходы"
 
     def __str__(self):
-        return f"Продано кому: {self.client} за {self.expense_price} р. "
+        return f"Продано кому: {self.client}  "
 
 class Expense_item(models.Model):
+    #Расходная продажи
     product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
     expense = models.ForeignKey('Expense', on_delete=models.CASCADE, verbose_name="Расходная накладная")
     product_vendor = models.CharField("Артикул товара", max_length=100)
-    group = models.ForeignKey('Group', on_delete=models.CASCADE, verbose_name="Группа")
+    group = models.ForeignKey('Group', on_delete=models.CASCADE, blank=True, null=True, verbose_name="Группа")
     price_provider = models.DecimalField("Цена поставщика", max_digits=10, decimal_places=2)
     product_quantity = models.CharField("Количество товара для продажи", max_length=100)
-    product_nds = models.CharField("НДС", max_length=20)
+    product_vat = models.CharField("НДС", max_length=20)
     product_extra = models.CharField("Надбавка", max_length=100)
-    total_price_expense = models.CharField("Общая цена с НДС и надбавкой и количеством", max_length=100)
+    total_price_expense = models.DecimalField("Общая цена с НДС и надбавкой и количеством", max_digits=10, decimal_places=2)
     product_country = models.CharField("Страна товара", max_length=100)
     product_barcode = models.CharField("Штрихкод товара", max_length=100)
 
 
-#expense_item таблица новая
-#продуты ключ , артикул, группа- ключ , цена поставщица, количество,
-# ндс(ватт), надбавка, обший прайс с ндс и надбавкой и количеством, номер накладной расходной id expense , страна, штих код
+    class Meta:
+
+        verbose_name = "Расходная продажи"
+        verbose_name_plural = "Расходная продажи"
+
+    def __str__(self):
+        return str(self.product)
+
 
 
 
 
 class Retail(models.Model):
+    #Розничная торговля
     product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
     group = models.ForeignKey('Group', on_delete=models.CASCADE, verbose_name="Группа")
     product_vendor = models.CharField("Артикул товара", max_length=100)
     product_country = models.CharField("Страна товара", max_length=100)
     product_barcode = models.CharField("Штрихкод товара", max_length=100)
-    product_nds = models.CharField("НДС", max_length=20)
+    product_vat = models.CharField("НДС", max_length=20)
     product_extra = models.CharField("Надбавка", max_length=100)
     product_quantity = models.CharField("Количество товара", max_length=100)
-    price_nds = models.CharField("Общая цена с НДС", max_length=100)
-    total_price = models.CharField("Общая цена с ндс и надбавкой", max_length=100)
+    total_price_vat = models.DecimalField("Общая цена с НДС", max_digits=10, decimal_places=2)
+    full_price = models.DecimalField("Общая цена с ндс и надбавкой", max_digits=10, decimal_places=2)
     date_item = models.DateField("Дата выставления чека",  blank=False)
-    #paymant оплата картой или наличными
+    #paymant оплата картой или наличными добавить
+
+
+    class Meta:
+
+        verbose_name = "Розничная торговля"
+        verbose_name_plural = "Розничная торговля"
+
+    def __str__(self):
+        return str(self.product)
 
 
 
@@ -184,7 +197,6 @@ class Price_change(models.Model):
     price_change_date = models.DateField("Дата изменения цены", blank=True)
     expense_sale_price = models.DecimalField("Старая цена со склада", max_digits=10, decimal_places=2)
     price_change_new = models.DecimalField("Новая цена", max_digits=10, decimal_places=2)
-    #stock = models.ForeignKey('Stock', on_delete=models.CASCADE, verbose_name="Склад") - поменять на приход позже
 
     class Meta:
 
@@ -192,7 +204,7 @@ class Price_change(models.Model):
         verbose_name_plural = "Изменение цены"
 
     def __str__(self):
-        return self.product
+        return str(self.product)
 
 
 
@@ -220,11 +232,11 @@ class Stock(models.Model):
     product_quantity = models.CharField("Количество товара", max_length=100)
     product_country = models.CharField("Страна товара", max_length=255)
     product_vendor = models.CharField("Артикул товара", max_length=255)
-    group = models.ForeignKey('Group',on_delete=models.CASCADE, verbose_name="Группа", blank=True, null=True)
+    group = models.ForeignKey('Group', on_delete=models.CASCADE, verbose_name="Группа", blank=True, null=True)
     expense_allowance = models.DecimalField("Цена с надбавкой", max_digits=10, decimal_places=2)
-    product_price = models.CharField("Общая цена без ндс", max_length=255)
-    product_nds = models.CharField("НДС", max_length=255)
-    expense_price = models.DecimalField("Общая цена с ндс", max_digits=10, decimal_places=2)
+    product_price = models.DecimalField("Общая цена без ндс", max_digits=10, decimal_places=2)
+    product_vat = models.CharField("НДС", max_length=255)
+    expense_full_price = models.DecimalField("Общая цена с ндс", max_digits=10, decimal_places=2)
     product_barcode = models.CharField("Штрихкод", max_length=255)
 
     class Meta:

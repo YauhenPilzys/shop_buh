@@ -6,7 +6,8 @@ from .serializers import ProductSerializer, ClientSerializer, ProviderSerializer
     ClientCreateSerializer, ClientDetailSerializer, ProviderCreateSerializer, \
     ProviderDetailSerializer, StockCreateSerializer, StockDetailSerializer, IncomeSerializer, IncomeCreateSerializer, \
     IncomeDetailSerializer, Expense_itemSerializer, RetailSerializer, ExpenseCreateSerializer, ExpenseDetailSerializer, \
-    Expense_itemCreateSerializer, Expense_itemDetailSerializer, RetailCreateSerializer, RetailDetailSerializer
+    Expense_itemCreateSerializer, Expense_itemDetailSerializer, RetailCreateSerializer, RetailDetailSerializer, \
+    Price_changeCreateSerializer, Price_changeDetailSerializer
 
 from rest_framework import generics
 from django.shortcuts import get_object_or_404
@@ -41,9 +42,7 @@ class ProviderViewSet(viewsets.ModelViewSet):
 
 
 
-class ProviderListView(generics.ListAPIView):
-    queryset = Provider.objects.all()
-    serializer_class = ProviderSerializer
+
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
@@ -84,8 +83,6 @@ class ProductViewSet(viewsets.ModelViewSet):  #справочник
     filter_backends = [filters.SearchFilter]
     search_fields = ['product_name']  #?search=AAAA
     pagination_class = APIListPagination
-
-
 
 
 
@@ -160,12 +157,20 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
         return Expense_itemDetailSerializer
 
 
+
+    def get_queryset(self): #добавили поиск расхода по id_накладной расхода (?expense_id=2 http://127.0.0.1:8000/api/expenses_item/?expense_id=1)
+        expense_id = self.request.query_params.get('expense_id')
+        if expense_id:
+            return Expense_item.objects.filter(expense_id=expense_id)
+        return super().get_queryset()
+
+
 class StockViewSet(viewsets.ModelViewSet):
 
     queryset = Stock.objects.all().order_by('-id')
     serializer_class = StockSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['product__product_name', 'product__id']  #сделать поиск по имени когда другие таблицы связаны
+    search_fields = ['product__product_name', 'product__id']
     pagination_class = APIListPagination
 
 
@@ -191,6 +196,25 @@ class StockViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(stock)
         return Response(serializer.data)
 
+    # сделать ссылку поиска на складе по названию товара по любой букве (api/stocks/search_product_by_letter/?letter=U)
+    @action(detail=False, methods=['GET'])
+    def search_product_by_letter(self, request):
+        # Получаем значение GET-параметра 'letter'
+        letter = request.GET.get('letter', '').strip()
+
+        # Проверяем, что буква передана
+        if not letter:
+            return Response({'error': 'Буква не введена'})
+
+        # Ищем товары в складе, чьи названия содержат переданную букву
+        warehouse_items = Stock.objects.filter(product__product_name__icontains=letter)
+
+        # Сериализуем найденные записи и возвращаем результат
+        serializer = StockSerializer(warehouse_items, many=True)
+        return Response(serializer.data)
+
+
+
 
 
 
@@ -202,6 +226,13 @@ class Price_changeViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['']
     pagination_class = APIListPagination
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return Price_changeCreateSerializer  # сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
+        return Price_changeDetailSerializer
+
+
 
 
 
