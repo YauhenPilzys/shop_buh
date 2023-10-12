@@ -50,6 +50,7 @@ router.register(r'stocks', StockViewSet)
 router.register(r'prices_change', Price_changeViewSet)
 router.register(r'incomes', IncomeViewSet)
 router.register(r'retails', RetailViewSet)
+router.register(r'contracts', ContractViewSet)
 
 
 

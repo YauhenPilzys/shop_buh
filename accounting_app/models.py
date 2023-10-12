@@ -1,4 +1,6 @@
 from django.db import models
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
 
 
 class Client(models.Model):
@@ -76,7 +78,7 @@ class Group(models.Model):
 
 
 class Invoice(models.Model):
-    #Накладная
+    #Накладная прихода
     providers = models.ForeignKey("Provider", on_delete=models.CASCADE, verbose_name="Поставщик")
     invoice_number = models.CharField("Номер накладной", max_length=100)
     product_date = models.DateField("Дата поступления ", blank=False)
@@ -123,11 +125,11 @@ class Expense(models.Model):
     expense_number = models.CharField("Номер по накладной", max_length=100)
     expense_price = models.DecimalField("Стоимость", max_digits=10, decimal_places=2)
     expense_price_allowance = models.DecimalField("Стоимость с надбавкой", max_digits=10, decimal_places=2)
-    expense_vat = models.DecimalField("Сумма НДС ", max_digits=10, decimal_places=2)
+    expense_vat = models.CharField("Сумма НДС ", max_length=100, blank=True, null=True)
     expense_date = models.DateField("Дата продажи",  blank=False)
-    #expense procurations number номер доверенности могут быть пустые
-    #дата доверенности   могут быть пустые
-    # кем выдана доверенность  могут быть пустые
+    number_proxy = models.CharField("Номер доверенности", max_length=100, blank=True, null=True)
+    date_proxy = models.DateField ("Дата доверенности", blank=True, null=True)     # могут быть пустые
+    proxy_user = models.CharField("Кем выдана довереннось", max_length=100, blank=True, null=True)
     # expense_doc в ручную документы
 
     class Meta:
@@ -143,11 +145,11 @@ class Expense_item(models.Model):
     expense = models.ForeignKey('Expense', on_delete=models.CASCADE, verbose_name="Расходная накладная")
     product_vendor = models.CharField("Артикул товара", max_length=100)
     group = models.ForeignKey('Group', on_delete=models.CASCADE, blank=True, null=True, verbose_name="Группа")
-    price_provider = models.DecimalField("Цена поставщика", max_digits=10, decimal_places=2)
+    price_provider = models.CharField("Цена поставщика", max_length=100)
     product_quantity = models.CharField("Количество товара для продажи", max_length=100)
     product_vat = models.CharField("НДС", max_length=20)
     product_extra = models.CharField("Надбавка", max_length=100)
-    total_price_expense = models.DecimalField("Общая цена с НДС и надбавкой и количеством", max_digits=10, decimal_places=2)
+    total_price_expense = models.CharField("Общая цена с НДС, надбавкой и количеством", max_length=100)
     product_country = models.CharField("Страна товара", max_length=100)
     product_barcode = models.CharField("Штрихкод товара", max_length=100)
 
@@ -224,20 +226,37 @@ class Bank(models.Model):
         return self.bank_name
 
 
+class Contract(models.Model):
+    #Договор
+    client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Клиент")
+    contract_number = models.CharField("Номер договора", max_length=100)
+    contract_date = models.DateField("Дата договора", blank=False)
+
+
+    class Meta:
+        verbose_name = "Договор"
+        verbose_name_plural = "Договора"
+
+    def __str__(self):
+        return f"Номер договора: {self.contract_number} "
+
 
 
 class Stock(models.Model):
     #Склад
     product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
-    product_quantity = models.CharField("Количество товара", max_length=100)
+    product_quantity = models.CharField("Количество товара", max_length=255)
     product_country = models.CharField("Страна товара", max_length=255)
     product_vendor = models.CharField("Артикул товара", max_length=255)
+    product_reserve = models.CharField("Резерв товара", max_length=255, blank=True, null=True)
     group = models.ForeignKey('Group', on_delete=models.CASCADE, verbose_name="Группа", blank=True, null=True)
     expense_allowance = models.DecimalField("Цена с надбавкой", max_digits=10, decimal_places=2)
-    product_price = models.DecimalField("Общая цена без ндс", max_digits=10, decimal_places=2)
+    product_price = models.CharField("Общая цена без ндс", max_length=255)
     product_vat = models.CharField("НДС", max_length=255)
-    expense_full_price = models.DecimalField("Общая цена с ндс", max_digits=10, decimal_places=2)
+    expense_full_price = models.CharField("Общая цена с ндс", max_length=100, null=True, blank=True)
     product_barcode = models.CharField("Штрихкод", max_length=255)
+
+
 
     class Meta:
         verbose_name = "Склад"
@@ -245,3 +264,12 @@ class Stock(models.Model):
 
     def __str__(self):
         return f" id {self.id} - {self.product} - количество {self.product_quantity} шт "
+
+#@receiver(pre_save, sender=Stock) #перемножить две строчки значением string
+#def calculate_multiplication_result(sender, instance, **kwargs):
+#    result = str(int(instance.product_quantity) * int(instance.product_price))
+#    instance.expense_full_price = result
+
+
+
+

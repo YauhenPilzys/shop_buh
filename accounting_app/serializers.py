@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item, \
-    Retail
+    Retail, Contract
 
 
 class BankSerializer(serializers.ModelSerializer):
@@ -44,10 +44,6 @@ class GroupSerializer(serializers.ModelSerializer):
 
 
 
-class InvoiceCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Invoice
-        fields = '__all__'
 
 
 
@@ -84,6 +80,18 @@ class InvoiceSerializer(serializers.ModelSerializer):
         model = Invoice
         fields = '__all__'
 
+
+
+class InvoiceCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invoice
+        fields = '__all__'
+
+
+class InvoiceDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invoice
+        fields = '__all__'
 
 
 
@@ -255,6 +263,30 @@ class RetailDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Retail
         fields = '__all__'
+
+
+class ContractSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Contract
+        fields = '__all__'
+
+
+class ContractCreateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Contract
+        fields = '__all__'
+
+
+class ContractDetailSerializer(serializers.ModelSerializer):
+    client = ClientSerializer()              #get запрос выдает весь список, post - только ID
+    class Meta:
+        model = Contract
+        fields = '__all__'
+
+
+
 
 
 

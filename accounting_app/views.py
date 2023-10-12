@@ -7,7 +7,8 @@ from .serializers import ProductSerializer, ClientSerializer, ProviderSerializer
     ProviderDetailSerializer, StockCreateSerializer, StockDetailSerializer, IncomeSerializer, IncomeCreateSerializer, \
     IncomeDetailSerializer, Expense_itemSerializer, RetailSerializer, ExpenseCreateSerializer, ExpenseDetailSerializer, \
     Expense_itemCreateSerializer, Expense_itemDetailSerializer, RetailCreateSerializer, RetailDetailSerializer, \
-    Price_changeCreateSerializer, Price_changeDetailSerializer
+    Price_changeCreateSerializer, Price_changeDetailSerializer, ContractSerializer, ContractCreateSerializer, \
+    ContractDetailSerializer
 
 from rest_framework import generics
 from django.shortcuts import get_object_or_404
@@ -158,7 +159,7 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
 
 
 
-    def get_queryset(self): #добавили поиск расхода по id_накладной расхода (?expense_id=2 http://127.0.0.1:8000/api/expenses_item/?expense_id=1)
+    def get_queryset(self): #добавили поиск расхода по id_накладной расхода (api/expenses_item/?expense_id=1)
         expense_id = self.request.query_params.get('expense_id')
         if expense_id:
             return Expense_item.objects.filter(expense_id=expense_id)
@@ -170,7 +171,7 @@ class StockViewSet(viewsets.ModelViewSet):
     queryset = Stock.objects.all().order_by('-id')
     serializer_class = StockSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['product__product_name', 'product__id']
+    search_fields = ['product__product_name', 'product__id']  #?search=AAAA (имя товара / ID товара)
     pagination_class = APIListPagination
 
 
@@ -180,7 +181,7 @@ class StockViewSet(viewsets.ModelViewSet):
             return StockCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
         return StockDetailSerializer
 
-    #сделать ссылку поиска на складе товара по ID (GET /api/stocks/search_by_product_id/?product_id=2)
+    #сделать ссылку поиска на складе товара по его ID (GET /api/stocks/search_by_product_id/?product_id=2)
     @action(detail=False, methods=['GET'])
     def search_by_product_id(self, request):
         product_id = request.query_params.get('product_id')
@@ -196,7 +197,7 @@ class StockViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(stock)
         return Response(serializer.data)
 
-    # сделать ссылку поиска на складе по названию товара по любой букве (api/stocks/search_product_by_letter/?letter=U)
+    #сделать ссылку поиска на складе по названию товара по любой букве (api/stocks/search_product_by_letter/?letter=I)
     @action(detail=False, methods=['GET'])
     def search_product_by_letter(self, request):
         # Получаем значение GET-параметра 'letter'
@@ -207,11 +208,26 @@ class StockViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Буква не введена'})
 
         # Ищем товары в складе, чьи названия содержат переданную букву
-        warehouse_items = Stock.objects.filter(product__product_name__icontains=letter)
+        stock = Stock.objects.filter(product__product_name__icontains=letter)
 
         # Сериализуем найденные записи и возвращаем результат
-        serializer = StockSerializer(warehouse_items, many=True)
+        serializer = StockSerializer(stock, many=True)
         return Response(serializer.data)
+
+    # сделать ссылку поиска на складе по точному количеству товара (api/stocks/search_by_quantity/?quantity=0)
+    @action(detail=False, methods=['GET'])
+    def search_by_quantity(self, request):
+        quantity = request.query_params.get('quantity')
+
+        if quantity is not None:
+            try:
+                quantity = int(quantity)
+                products_with_exact_quantity = Stock.objects.filter(product_quantity=quantity)
+                serializer = StockSerializer(products_with_exact_quantity, many=True)
+                return Response(serializer.data)
+            except ValueError:
+                return Response({'error': 'Некорректно введено количество товара. Укажите целое число'}, status=400)
+
 
 
 
@@ -247,3 +263,24 @@ class RetailViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return RetailCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
         return RetailDetailSerializer
+
+
+
+class ContractViewSet(viewsets.ModelViewSet):
+    queryset = Contract.objects.all().order_by('-id')
+    serializer_class = ContractSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['client__id']    #?search=1
+    pagination_class = APIListPagination
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ContractCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
+        return ContractDetailSerializer
+
+
+    def get_queryset(self): #добавили поиск договоров по номеру договора (api/contracts/?contract_number=123)
+        contract_number = self.request.query_params.get('contract_number')
+        if contract_number:
+            return Contract.objects.filter(contract_number=contract_number)
+        return super().get_queryset()
