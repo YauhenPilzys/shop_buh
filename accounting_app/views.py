@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import viewsets, filters, mixins, status
 from rest_framework.views import APIView
 from .paginations import *
@@ -7,8 +8,8 @@ from .serializers import ProductSerializer, ClientSerializer, ProviderSerializer
     ProviderDetailSerializer, StockCreateSerializer, StockDetailSerializer, IncomeSerializer, IncomeCreateSerializer, \
     IncomeDetailSerializer, Expense_itemSerializer, RetailSerializer, ExpenseCreateSerializer, ExpenseDetailSerializer, \
     Expense_itemCreateSerializer, Expense_itemDetailSerializer, RetailCreateSerializer, RetailDetailSerializer, \
-    Price_changeCreateSerializer, Price_changeDetailSerializer, ContractSerializer, ContractCreateSerializer, \
-    ContractDetailSerializer
+    Price_changeCreateSerializer, Price_changeDetailSerializer, ContractCreateSerializer, \
+    ContractDetailSerializer, ContractSerializer
 
 from rest_framework import generics
 from django.shortcuts import get_object_or_404
@@ -25,7 +26,7 @@ class ProviderViewSet(viewsets.ModelViewSet):
     queryset = Provider.objects.all().order_by('-id')
     serializer_class = ProviderSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['provider_name']
+    search_fields = ['provider_name'] #?search
     pagination_class = APIListPagination
 
 
@@ -34,12 +35,36 @@ class ProviderViewSet(viewsets.ModelViewSet):
             return ProviderCreateSerializer  #сериализатор для POST-запросов
         return ProviderDetailSerializer
 
-#Если в накладой есть поставщик - TRUE, иначе FALSE
+#Еслли в накладой есть поставщик - TRUE, иначе FALSE  (/api/providers/5/check_invoice)
     @action(detail=True, methods=['GET'])
     def check_invoice(self, request, pk=None):
         providers = self.get_object()
         invoice_exists = providers.invoice_set.exists()
         return Response({'exists': invoice_exists})
+
+    #Поиск поставшика по букве в независимости от регистра и сортировка 5 по ID (api/providers/search_by_name/?name=)
+    @action(detail=False, methods=['GET'])
+    def search_by_name(self, request):
+        query = request.query_params.get('name', '')
+
+        #Делаем пагинацию
+        paginator = PageNumberPagination()
+
+        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
+        page_size = int(request.query_params.get('page_size', 5))
+        paginator.page_size = page_size
+
+        if not query:
+            providers = Provider.objects.all()  # Возвращает все записи, если 'name' не задан
+        else:
+            providers = Provider.objects.filter(provider_name__iregex=query).order_by('-id')
+
+        # Применяем пагинацию к результатам
+        paginated_providers = paginator.paginate_queryset(providers, request)
+
+        serializer = ProviderSerializer(paginated_providers, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
 
 
 
@@ -62,6 +87,31 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 
 
+    # Поиск invoice по invoice_number в независимости от регистра и сортировка 5 по ID (api/invoices/search_by_name/?name=)
+    @action(detail=False, methods=['GET'])
+    def search_by_name(self, request):
+        query = request.query_params.get('name', '')
+
+        # Делаем пагинацию
+        paginator = PageNumberPagination()
+
+        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
+        page_size = int(request.query_params.get('page_size', 5))
+        paginator.page_size = page_size
+
+        if not query:
+            invoices = Invoice.objects.all()  # Возвращает все записи, если 'name' не задан
+        else:
+            invoices = Invoice.objects.filter(invoice_number__iregex=query).order_by('-id')
+
+        # Применяем пагинацию к результатам
+        paginated_invoices = paginator.paginate_queryset(invoices, request)
+
+        serializer = InvoiceSerializer(paginated_invoices, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+
 
 
 class ClientViewSet(viewsets.ModelViewSet):  #справочник
@@ -76,6 +126,32 @@ class ClientViewSet(viewsets.ModelViewSet):  #справочник
             return ClientCreateSerializer  #сериализатор для POST-запросов
         return ClientDetailSerializer
 
+    # Поиск клиента по букве в независимости от регистра и сортировка 5 по ID (api/clients/search_by_name/?name=)
+    @action(detail=False, methods=['GET'])
+    def search_by_name(self, request):
+        query = request.query_params.get('name', '')
+
+        # Делаем пагинацию
+        paginator = PageNumberPagination()
+
+        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
+        page_size = int(request.query_params.get('page_size', 5))
+        paginator.page_size = page_size
+
+        if not query:
+            clients = Client.objects.all()  # Возвращает все записи, если 'name' не задан
+        else:
+            clients = Client.objects.filter(client_name__iregex=query).order_by('-id')
+
+        # Применяем пагинацию к результатам
+        paginated_clients = paginator.paginate_queryset(clients, request)
+
+        serializer = ClientSerializer(paginated_clients, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+
+
 
 
 class ProductViewSet(viewsets.ModelViewSet):  #справочник
@@ -84,6 +160,31 @@ class ProductViewSet(viewsets.ModelViewSet):  #справочник
     filter_backends = [filters.SearchFilter]
     search_fields = ['product_name']  #?search=AAAA
     pagination_class = APIListPagination
+
+
+
+    # Поиск товара по букве в независимости от регистра и сортировка 5 по ID (api/products/search_by_name/?name=)
+    @action(detail=False, methods=['GET'])
+    def search_by_name(self, request):
+        query = request.query_params.get('name', '')
+
+        # Делаем пагинацию
+        paginator = PageNumberPagination()
+
+        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
+        page_size = int(request.query_params.get('page_size', 5))
+        paginator.page_size = page_size
+
+        if not query:
+            products = Product.objects.all()  # Возвращает все записи, если 'name' не задан
+        else:
+            products = Product.objects.filter(product_name__iregex=query).order_by('-id')
+
+        # Применяем пагинацию к результатам
+        paginated_products = paginator.paginate_queryset(products, request)
+
+        serializer = ProductSerializer(paginated_products, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 
@@ -110,7 +211,7 @@ class IncomeViewSet(viewsets.ModelViewSet):
         return IncomeDetailSerializer
 
 
-    def get_queryset(self):   #добавили поиск прихода по id_накладной (?invoice_id=2)
+    def get_queryset(self):   #Поиск прихода по id_накладной (?invoice_id=2)
         invoice_id = self.request.query_params.get('invoice_id')
         if invoice_id:
             return Income.objects.filter(invoice_id=invoice_id)
@@ -125,6 +226,29 @@ class BankViewSet(viewsets.ModelViewSet): #справочник
     search_fields = ['bank_name']
     pagination_class = APIListPagination
 
+    # Поиск банка по букве в независимости от регистра и сортировка 5 по ID (api/banks/search_by_name/?name=)
+    @action(detail=False, methods=['GET'])
+    def search_by_name(self, request):
+        query = request.query_params.get('name', '')
+
+        # Делаем пагинацию
+        paginator = PageNumberPagination()
+
+        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
+        page_size = int(request.query_params.get('page_size', 5))
+        paginator.page_size = page_size
+
+        if not query:
+            banks = Bank.objects.all()  # Возвращает все записи, если 'name' не задан
+        else:
+            banks = Bank.objects.filter(bank_name__iregex=query).order_by('-id')
+
+        # Применяем пагинацию к результатам
+        paginated_banks = paginator.paginate_queryset(banks, request)
+
+        serializer = BankSerializer(paginated_banks, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
 
 
 
@@ -136,11 +260,40 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     search_fields = ['']
     pagination_class = APIListPagination
 
-
+    # Поиск банка по букве в независимости от регистра и сортировка 5 по ID (api/banks/search_by_name/?name=)
     def get_serializer_class(self):
         if self.action == 'create':
             return ExpenseCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
         return ExpenseDetailSerializer
+
+    # Поиск expense по expense_number букве в независимости от регистра и сортировка 5 по ID (api/expenses/search_by_name/?name=)
+    @action(detail=False, methods=['GET'])
+    def search_by_name(self, request):
+        query = request.query_params.get('name', '')
+
+        # Делаем пагинацию
+        paginator = PageNumberPagination()
+
+        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
+        page_size = int(request.query_params.get('page_size', 5))
+        paginator.page_size = page_size
+
+        if not query:
+            expenses = Expense.objects.all()  # Возвращает все записи, если 'name' не задан
+        else:
+            expenses = Expense.objects.filter(expense_number__iregex=query).order_by('-id')
+
+        # Применяем пагинацию к результатам
+        paginated_expenses = paginator.paginate_queryset(expenses, request)
+
+        serializer = ExpenseSerializer(paginated_expenses, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+
+
+
+
 
 
 
@@ -159,7 +312,10 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
 
 
 
-    def get_queryset(self): #добавили поиск расхода по id_накладной расхода (api/expenses_item/?expense_id=1)
+
+
+
+    def get_queryset(self): #Поиск расхода по id_накладной расхода (api/expenses_item/?expense_id=1)
         expense_id = self.request.query_params.get('expense_id')
         if expense_id:
             return Expense_item.objects.filter(expense_id=expense_id)
@@ -174,6 +330,49 @@ class StockViewSet(viewsets.ModelViewSet):
     search_fields = ['product__product_name', 'product__id']  #?search=AAAA (имя товара / ID товара)
     pagination_class = APIListPagination
 
+    # Замена строк где есть одинаковые параметры ввода и обновление последневведенных
+    @receiver(pre_save, sender=Stock)
+    def update_stock(sender, instance, **kwargs):
+        # Проверяем, существует ли запись с такими же product_id, product_country, product_price, product_vendor
+        existing_stock = Stock.objects.filter(product_id=instance.product_id,
+                                              product_country=instance.product_country,
+                                              product_price=instance.product_price,
+                                              product_vendor=instance.product_vendor).exclude(
+            id=instance.id).order_by('-id').first()
+
+        if existing_stock:
+            # Обновляем значения полей в соответствии с требованиями
+            instance.expense_allowance = existing_stock.expense_allowance
+            instance.product_reserve = existing_stock.product_reserve
+            instance.product_vat = existing_stock.product_vat
+            instance.product_barcode = existing_stock.product_barcode
+            instance.product_price_provider = existing_stock.product_price_provider  #цена с надбавкой
+            instance.expense_full_price = str(float(existing_stock.expense_full_price) + float(instance.expense_full_price)) #общая цена с ндс
+            instance.product_quantity = str(int(existing_stock.product_quantity) + int(instance.product_quantity))
+
+            # Если это не создание новой записи и не PATCH запрос, обновляем количество записи
+            if not kwargs.get('update_fields'):
+                instance.product_quantity
+
+                if existing_stock.id != instance.id:
+                    existing_stock.delete()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     def get_serializer_class(self):
@@ -181,7 +380,7 @@ class StockViewSet(viewsets.ModelViewSet):
             return StockCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
         return StockDetailSerializer
 
-    #сделать ссылку поиска на складе товара по его ID (GET /api/stocks/search_by_product_id/?product_id=2)
+    #Поиск на складе товара по его ID (GET /api/stocks/search_by_product_id/?product_id=2)
     @action(detail=False, methods=['GET'])
     def search_by_product_id(self, request):
         product_id = request.query_params.get('product_id')
@@ -190,31 +389,38 @@ class StockViewSet(viewsets.ModelViewSet):
             return Response({"message": "Не указан ID товара"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            stock = Stock.objects.get(product__id=product_id)
+            stock = Stock.objects.filter(product__id=product_id)  #filter- выводит два одинаковых ID товара, get - один товар
         except Stock.DoesNotExist:
-            return Response({"message": "Товар не найден на складе"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"response": "false"}, status=status.HTTP_200_OK)
 
-        serializer = self.get_serializer(stock)
+        serializer = self.get_serializer(stock, many=True) #filter- выводит два одинковых ID , get - один товар(удаляем many=TRUE)
         return Response(serializer.data)
 
-    #сделать ссылку поиска на складе по названию товара по любой букве (api/stocks/search_product_by_letter/?letter=I)
+    # Поиск на складе по названию товара по любой букве без учета регистра (api/stocks/search_by_name/?name=а)
+    # Поиск по названию без учета регистра - iregex, если по любой букве - icontains
     @action(detail=False, methods=['GET'])
-    def search_product_by_letter(self, request):
-        # Получаем значение GET-параметра 'letter'
-        letter = request.GET.get('letter', '').strip()
+    def search_by_name(self, request):
+        search_query = request.query_params.get('name', '')
 
-        # Проверяем, что буква передана
-        if not letter:
-            return Response({'error': 'Буква не введена'})
+        if not search_query:
+            # Если запрос пуст, возвращает все строки
+            stock = Stock.objects.all()
+        else:
+            # Поле, связанное с моделью Product для поиска по названию без учета регистра
+            products = Product.objects.filter(product_name__iregex=search_query)
+            stock = Stock.objects.filter(product__in=products)
 
-        # Ищем товары в складе, чьи названия содержат переданную букву
-        stock = Stock.objects.filter(product__product_name__icontains=letter)
+        stock = stock.order_by('-product')[:5] #Упорядочиваем результаты по продукту в убывающем порядке
 
-        # Сериализуем найденные записи и возвращаем результат
-        serializer = StockSerializer(stock, many=True)
-        return Response(serializer.data)
+        if stock:
+            serializer = StockSerializer(stock, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response({'detail': 'Товары не найдены'}, status=status.HTTP_404_NOT_FOUND)
 
-    # сделать ссылку поиска на складе по точному количеству товара (api/stocks/search_by_quantity/?quantity=0)
+
+
+    #Поиск на складе по точному количеству товара (api/stocks/search_by_quantity/?quantity=0)
     @action(detail=False, methods=['GET'])
     def search_by_quantity(self, request):
         quantity = request.query_params.get('quantity')
@@ -245,7 +451,7 @@ class Price_changeViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         if self.action == 'create':
-            return Price_changeCreateSerializer  # сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
+            return Price_changeCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
         return Price_changeDetailSerializer
 
 
@@ -279,8 +485,36 @@ class ContractViewSet(viewsets.ModelViewSet):
         return ContractDetailSerializer
 
 
-    def get_queryset(self): #добавили поиск договоров по номеру договора (api/contracts/?contract_number=123)
+    def get_queryset(self): #Поиск договоров по номеру договора (api/contracts/?contract_number=123)
         contract_number = self.request.query_params.get('contract_number')
         if contract_number:
             return Contract.objects.filter(contract_number=contract_number)
         return super().get_queryset()
+
+
+
+   #Поиск по двум параметрам где номер контракта по цифре все данные,или есть пустой запрос то весь список выдает (api/contracts/search_by_client_and_number/?client_id=4&contract_number=1234)
+    @action(detail=False, methods=['GET'])
+    def search_by_client_and_number(self, request):
+        client_id = request.query_params.get('client_id')
+        contract_number = request.query_params.get('contract_number')
+
+        if not client_id:
+            return Response({"message": "Не указан параметр client_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+        contracts = Contract.objects.filter(client_id=client_id)
+
+        if contract_number:
+            contracts = contracts.filter(contract_number__icontains=contract_number)
+
+        #Сортируем записи по дате создания в обратном порядке в количестве 5 записей
+        contracts = contracts.order_by('-contract_number')[:5]
+
+        serializer = self.get_serializer(contracts, many=True)
+        return Response(serializer.data)
+
+
+
+
+
+

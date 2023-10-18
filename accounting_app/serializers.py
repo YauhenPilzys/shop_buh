@@ -280,7 +280,7 @@ class ContractCreateSerializer(serializers.ModelSerializer):
 
 
 class ContractDetailSerializer(serializers.ModelSerializer):
-    client = ClientSerializer()              #get запрос выдает весь список, post - только ID
+    client = ClientSerializer()           #get запрос выдает весь список, post - только ID
     class Meta:
         model = Contract
         fields = '__all__'
