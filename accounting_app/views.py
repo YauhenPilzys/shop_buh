@@ -9,7 +9,7 @@ from .serializers import ProductSerializer, ClientSerializer, ProviderSerializer
     IncomeDetailSerializer, Expense_itemSerializer, RetailSerializer, ExpenseCreateSerializer, ExpenseDetailSerializer, \
     Expense_itemCreateSerializer, Expense_itemDetailSerializer, RetailCreateSerializer, RetailDetailSerializer, \
     Price_changeCreateSerializer, Price_changeDetailSerializer, ContractCreateSerializer, \
-    ContractDetailSerializer, ContractSerializer
+    ContractDetailSerializer, ContractSerializer, CountrySerializer
 
 from rest_framework import generics
 from django.shortcuts import get_object_or_404
@@ -512,6 +512,46 @@ class ContractViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(contracts, many=True)
         return Response(serializer.data)
+
+
+
+
+
+class CountryViewSet(viewsets.ModelViewSet):  #справочник
+    queryset = Country.objects.all().order_by('country_name')
+    serializer_class = CountrySerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['country_name']  #?search=AAAA
+    pagination_class = APIListPagination
+
+    # Поиск страны по букве в независимости от регистра и сортировка 5 по ID (api/countries/search_by_name/?name=)
+    @action(detail=False, methods=['GET'])
+    def search_by_name(self, request):
+        query = request.query_params.get('name', '')
+
+        # Делаем пагинацию
+        paginator = PageNumberPagination()
+
+        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
+        page_size = int(request.query_params.get('page_size', 5))
+        paginator.page_size = page_size
+
+        if not query:
+            countries = Country.objects.all()  # Возвращает все записи, если 'name' не задан
+        else:
+            countries = Country.objects.filter(country_name__iregex=query).order_by('-id')
+
+        # Применяем пагинацию к результатам
+        paginated_countries = paginator.paginate_queryset(countries, request)
+
+        serializer = CountrySerializer(paginated_countries, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+
+
+
+
 
 
 

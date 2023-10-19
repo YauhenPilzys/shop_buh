@@ -283,4 +283,17 @@ class Stock(models.Model):
 
 
 
+class Country(models.Model):
+    country_name = models.CharField("Название страны", max_length=100)
+
+
+    class Meta:
+        verbose_name = "Страна"
+        verbose_name_plural = "Страны"
+
+    def __str__(self):
+         return self.country_name
+
+
+
 

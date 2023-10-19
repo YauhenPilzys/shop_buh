@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item, \
-    Retail, Contract
+    Retail, Contract, Country
+
 
 
 class BankSerializer(serializers.ModelSerializer):
@@ -283,6 +284,14 @@ class ContractDetailSerializer(serializers.ModelSerializer):
     client = ClientSerializer()           #get запрос выдает весь список, post - только ID
     class Meta:
         model = Contract
+        fields = '__all__'
+
+
+
+
+class CountrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Country
         fields = '__all__'
 
 
