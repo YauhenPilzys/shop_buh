@@ -201,7 +201,7 @@ class IncomeViewSet(viewsets.ModelViewSet):
     queryset = Income.objects.all().order_by('-id')
     serializer_class = IncomeSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['invoice_id']
+    search_fields = ['invoice_id'] #?search=AAAA
     pagination_class = APIListPagination
 
 
@@ -260,7 +260,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     search_fields = ['']
     pagination_class = APIListPagination
 
-    # Поиск банка по букве в независимости от регистра и сортировка 5 по ID (api/banks/search_by_name/?name=)
+
     def get_serializer_class(self):
         if self.action == 'create':
             return ExpenseCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
@@ -330,6 +330,14 @@ class StockViewSet(viewsets.ModelViewSet):
     search_fields = ['product__product_name', 'product__id']  #?search=AAAA (имя товара / ID товара)
     pagination_class = APIListPagination
 
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return StockCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
+        return StockDetailSerializer
+
+
+
     # Замена строк где есть одинаковые параметры ввода и обновление последневведенных
     @receiver(pre_save, sender=Stock)
     def update_stock(sender, instance, **kwargs):
@@ -359,28 +367,45 @@ class StockViewSet(viewsets.ModelViewSet):
 
 
 
+    # Поиск товаров от одного до пяти слов. Список всех товаров связанных с первым словом +  список всех товаров с вторым словом и так далее
+    #(/api/stocks/filter_by_keyword/?query=рамка+дом+артикул в числовом значении)
+    @action(detail=False, methods=['GET'])
+    def filter_by_keyword(self, request):
+        query = request.query_params.get('query', '')
+        keywords = query.split()
+
+        queryset = Stock.objects.all()
+        results = queryset
+
+        if len(keywords) == 1:
+            single_keyword = keywords[0]
+            # Поиск по одному слову в названии и артикулу товара
+            results = results.filter(
+                Q(product__product_name__iregex=single_keyword) |
+                Q(product_vendor__iregex=single_keyword)
+            )
+        elif len(keywords) >= 2 and len(keywords) <= 5:
+            # Поиск по 2-5 словам в названии и артикулу товара
+            for keyword in keywords:
+                results = results.filter(
+                    Q(product__product_name__iregex=keyword) |
+                    Q(product_vendor__iregex=keyword)
+                )
+
+        # Применяем пагинацию к записям
+        self.pagination_class = APIListPagination
+        page = self.paginate_queryset(results)
+        if page is not None:
+            serializer = StockSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = StockSerializer(results, many=True)
+
+        return Response({'results': serializer.data})
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return StockCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
-        return StockDetailSerializer
-
-    #Поиск на складе товара по его ID (GET /api/stocks/search_by_product_id/?product_id=2)
+    # Поиск на складе товара по его ID (GET /api/stocks/search_by_product_id/?product_id=2)
     @action(detail=False, methods=['GET'])
     def search_by_product_id(self, request):
         product_id = request.query_params.get('product_id')
@@ -389,7 +414,7 @@ class StockViewSet(viewsets.ModelViewSet):
             return Response({"message": "Не указан ID товара"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            stock = Stock.objects.filter(product__id=product_id)  #filter- выводит два одинаковых ID товара, get - один товар
+            stock = Stock.objects.filter(product__id=product_id)  #filter-выводит два одинаковых ID товара, get - один товар
         except Stock.DoesNotExist:
             return Response({"response": "false"}, status=status.HTTP_200_OK)
 
@@ -420,7 +445,7 @@ class StockViewSet(viewsets.ModelViewSet):
 
 
 
-    #Поиск на складе по точному количеству товара (api/stocks/search_by_quantity/?quantity=0)
+    # Поиск на складе по точному количеству товара (api/stocks/search_by_quantity/?quantity=0)
     @action(detail=False, methods=['GET'])
     def search_by_quantity(self, request):
         quantity = request.query_params.get('quantity')
@@ -518,7 +543,7 @@ class ContractViewSet(viewsets.ModelViewSet):
 
 
 class CountryViewSet(viewsets.ModelViewSet):  #справочник
-    queryset = Country.objects.all().order_by('country_name')
+    queryset = Country.objects.all().order_by('-id')
     serializer_class = CountrySerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['country_name']  #?search=AAAA
@@ -539,7 +564,7 @@ class CountryViewSet(viewsets.ModelViewSet):  #справочник
         if not query:
             countries = Country.objects.all()  # Возвращает все записи, если 'name' не задан
         else:
-            countries = Country.objects.filter(country_name__iregex=query).order_by('-id')
+            countries = Country.objects.filter(country_name__iregex=query).order_by('-id') #Поиск по имени по любой букве
 
         # Применяем пагинацию к результатам
         paginated_countries = paginator.paginate_queryset(countries, request)
