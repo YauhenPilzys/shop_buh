@@ -76,10 +76,12 @@ class ProviderDetailSerializer(serializers.ModelSerializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     providers = ProviderSerializer()
-
     class Meta:
         model = Invoice
         fields = '__all__'
+
+
+
 
 
 
@@ -128,30 +130,13 @@ class StockDetailSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class Price_changeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Price_change
-        fields = '__all__'
 
-
-
-class Price_changeDetailSerializer(serializers.ModelSerializer):
-    product = ProductSerializer()
-
-
-    class Meta:
-        model = Price_change
-        fields = '__all__'
-
-
-class Price_changeCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Price_change
-        fields = '__all__'
 
 
 
 class IncomeSerializer(serializers.ModelSerializer):
+    product = ProductSerializer()
+    invoice = InvoiceSerializer()
 
     class Meta:
         model = Income
@@ -170,14 +155,35 @@ class IncomeCreateSerializer(serializers.ModelSerializer):
 
 
 class IncomeDetailSerializer(serializers.ModelSerializer):
-    #Вывод всех продуктов в GET запросе
-    product = ProductSerializer()
-    invoice = InvoiceSerializer()
+
 
     class Meta:
         model = Income
         fields = '__all__'
 
+
+class Price_changeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Price_change
+        fields = '__all__'
+
+
+
+class Price_changeDetailSerializer(serializers.ModelSerializer):  #Чтобы в GET запросе был выведен весь список
+    product = ProductSerializer()
+    income = IncomeSerializer()
+
+
+    class Meta:
+        model = Price_change
+        fields = '__all__'
+
+
+class Price_changeCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Price_change
+        fields = '__all__'
 
 
 

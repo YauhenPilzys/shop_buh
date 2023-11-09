@@ -94,12 +94,31 @@ class Invoice(models.Model):
         return f"id : {self.id} / накладная № #{self.invoice_number} "
 
 
+class Price_change(models.Model):
+    #Изменение цены (корректировка)
+    income = models.ForeignKey('Income', on_delete=models.CASCADE, verbose_name="Приход")
+    product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
+    price_change_date = models.CharField("Дата изменения цены", max_length=100)
+    expense_sale_price = models.CharField("Старая цена со склада", max_length=100)
+    price_change_new = models.CharField("Новая цена", max_length=100)
+
+    class Meta:
+
+        verbose_name = "Изменение цены"
+        verbose_name_plural = "Изменение цены"
+
+    def __str__(self):
+        return str(self.product)
+
+
+
 
 class Income(models.Model):
     #Приход
     product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
-    invoice = models.ForeignKey('Invoice', on_delete=models.CASCADE, verbose_name="Накладная" )
-    product_vendor_providers = models.CharField("Артикул товара поставщика ", max_length=100, blank=True, null=True )
+    invoice = models.ForeignKey('Invoice', on_delete=models.CASCADE, verbose_name="Накладная")
+    stock = models.ForeignKey('Stock', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Склад")
+    product_vendor_providers = models.CharField("Артикул товара поставщика ", max_length=100, blank=True, null=True)
     income_quantity = models.CharField("Количество",  max_length=255)
     product_country = models.CharField("Страна товара", max_length=255)
     product_barcode = models.CharField("Штрихкод товара", max_length=255)
@@ -111,12 +130,13 @@ class Income(models.Model):
     income_allowance = models.CharField("Надбавка", max_length=100)
 
 
+
     class Meta:
         verbose_name = "Приход"
         verbose_name_plural = "Приходы"
 
     def __str__(self):
-        return f"Получили товар :{self.product} в количестве {self.income_quantity}  "
+        return f"Получили товар :{self.product} в количестве {self.income_quantity} "
 
 
 
@@ -126,6 +146,7 @@ class Expense(models.Model):
     #Расход
     client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Клиент")
     expense_number = models.CharField("Номер по накладной", max_length=100)
+    expense_contract = models.CharField("Номер договора", max_length=100, blank=True, null=True)
     expense_price = models.CharField("Стоимость", max_length=100)
     expense_price_allowance = models.CharField("Стоимость с надбавкой", max_length=100)
     expense_vat = models.CharField("Сумма НДС ", max_length=100, blank=True, null=True)
@@ -133,7 +154,9 @@ class Expense(models.Model):
     number_proxy = models.CharField("Номер доверенности", max_length=100, blank=True, null=True)
     date_proxy = models.CharField("Дата доверенности", max_length=100)     # могут быть пустые
     proxy_user = models.CharField("Кем выдана довереннось", max_length=100, blank=True, null=True)
-    # expense_doc в ручную документы
+    expense_print = models.CharField("Печатана ли накладная", max_length=100, blank=True, null=True)
+
+
 
     class Meta:
         verbose_name = "Расход"
@@ -149,14 +172,18 @@ class Expense_item(models.Model):
     product_vendor = models.CharField("Артикул товара", max_length=100)
     group = models.ForeignKey('Group', on_delete=models.CASCADE, blank=True, null=True, verbose_name="Группа")
     price_allowance = models.CharField("Цена с надбавкой", max_length=100)
-    price_mult_quant = models.CharField("Стоимость",max_length=100)
+    price_mult_quant = models.CharField("Стоимость", max_length=100)
     product_quantity = models.CharField("Количество товара для продажи", max_length=100)
     amount_vat = models.CharField("Сумма НДС", max_length=100)
     price_with_vat = models.CharField("Стоимость с НДС", max_length=100)
     product_vat = models.CharField("НДС", max_length=20)
+    product_allowance = models.CharField("Надбавка", max_length=100, blank=True, null=True)
     product_country = models.CharField("Страна товара", max_length=100)
     product_barcode = models.CharField("Штрихкод товара", max_length=100)
+    product_discount = models.CharField("Скидка", max_length=100, blank=True, null=True)
+    product_stock = models.CharField("Склад", max_length=100, blank=True, null=True)
     note = models.CharField("Примечание", max_length=100, blank=True, null=True)
+
 
 
     class Meta:
@@ -198,20 +225,6 @@ class Retail(models.Model):
 
 
 
-class Price_change(models.Model):
-    #Изменение цены (корректировка)
-    product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
-    price_change_date = models.CharField("Дата изменения цены", max_length=100)
-    expense_sale_price = models.CharField("Старая цена со склада", max_length=100)
-    price_change_new = models.CharField("Новая цена", max_length=100)
-
-    class Meta:
-
-        verbose_name = "Изменение цены"
-        verbose_name_plural = "Изменение цены"
-
-    def __str__(self):
-        return str(self.product)
 
 
 
@@ -233,7 +246,7 @@ class Bank(models.Model):
 
 class Contract(models.Model):
     #Договор
-    client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Клиент")
+    client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Kлиент")
     contract_number = models.CharField("Номер договора", max_length=100)
     contract_date = models.DateField("Дата договора")
 
@@ -284,7 +297,7 @@ class Stock(models.Model):
 
 
 class Country(models.Model):
-    country_name = models.CharField("Название страны", max_length=100)
+    country_name = models.CharField("Hазвание страны", max_length=100)
 
 
     class Meta:

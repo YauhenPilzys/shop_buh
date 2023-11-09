@@ -17,6 +17,8 @@ from django.http import JsonResponse
 from .models import *
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db.models.signals import post_save
+from decimal import Decimal
 
 
 
@@ -80,10 +82,17 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 
 
-    def get_serializer_class(self):
+
+    def get_serializer_class(self):          #сериализатор для POST и PACT-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
         if self.request.method == 'POST':
             return InvoiceCreateSerializer
+        elif self.request.method == 'PATCH':
+            return InvoiceCreateSerializer
         return InvoiceSerializer
+
+
+
+
 
 
 
@@ -204,11 +213,15 @@ class IncomeViewSet(viewsets.ModelViewSet):
     search_fields = ['invoice_id'] #?search=AAAA
     pagination_class = APIListPagination
 
+    def get_serializer_class(
+            self):  # сериализатор для POST и PACT-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
+        if self.request.method == 'POST':
+            return IncomeCreateSerializer
+        elif self.request.method == 'PATCH':
+            return IncomeCreateSerializer
+        return IncomeSerializer
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return IncomeCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
-        return IncomeDetailSerializer
+
 
 
     def get_queryset(self):   #Поиск прихода по id_накладной (?invoice_id=2)
@@ -338,7 +351,7 @@ class StockViewSet(viewsets.ModelViewSet):
 
 
 
-    # Замена строк где есть одинаковые параметры ввода и обновление последневведенных
+    # Замена строк где есть одинаковые параметры ввода и обновление последневведенных + замена id обновленного stock в таблицу income
     @receiver(pre_save, sender=Stock)
     def update_stock(sender, instance, **kwargs):
         # Проверяем, существует ли запись с такими же product_id, product_country, product_price, product_vendor
@@ -346,9 +359,14 @@ class StockViewSet(viewsets.ModelViewSet):
                                               product_country=instance.product_country,
                                               product_price=instance.product_price,
                                               product_vendor=instance.product_vendor).exclude(
-            id=instance.id).order_by('-id').first()
+            id=instance.id).order_by('id').first()
 
         if existing_stock:
+
+            # Сохраняем старый идентификатор перед объединением
+            old_id = existing_stock.id
+
+
             # Обновляем значения полей в соответствии с требованиями
             instance.expense_allowance = existing_stock.expense_allowance
             instance.product_reserve = existing_stock.product_reserve
@@ -358,16 +376,27 @@ class StockViewSet(viewsets.ModelViewSet):
             instance.expense_full_price = str(float(existing_stock.expense_full_price) + float(instance.expense_full_price)) #общая цена с ндс
             instance.product_quantity = str(int(existing_stock.product_quantity) + int(instance.product_quantity))
 
-            # Если это не создание новой записи и не PATCH запрос, обновляем количество записи
-            if not kwargs.get('update_fields'):
-                instance.product_quantity
+            # Обновляем stock_id в связанных записях в таблице Income (удаляется id склада в приходе когда списываем товар)
+            #удалить эту строчку чтоб товар не удалялся
+            incomes = Income.objects.filter(stock_id=old_id)
+            for income in incomes:
+                income.stock_id = instance.id
+                income.save()
 
-                if existing_stock.id != instance.id:
-                    existing_stock.delete()
+            # Удаляем старые записи в таблице Stock
+            if existing_stock.id != instance.id:
+                existing_stock.delete()
 
 
 
-    # Поиск товаров от одного до пяти слов. Список всех товаров связанных с первым словом +  список всех товаров с вторым словом и так далее
+
+
+
+
+
+
+
+    # Поиск товаров от одного до пяти слов и артикула. Список всех товаров связанных с первым словом +  список всех товаров с вторым словом и так далее
     #(/api/stocks/filter_by_keyword/?query=рамка+дом+артикул в числовом значении)
     @action(detail=False, methods=['GET'])
     def filter_by_keyword(self, request):
@@ -478,6 +507,51 @@ class Price_changeViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return Price_changeCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
         return Price_changeDetailSerializer
+
+    @action(detail=False, methods=['GET'])    #Поиск по номеру инвойса и название товара с учетом фильтров (api/prices_change/search_by_invoice_product/?invoice_number=1&product_name=асфа)
+    def search_by_invoice_product(self, request):
+        invoice_number = request.GET.get('invoice_number')
+        product_name = request.GET.get('product_name')
+
+        if invoice_number is not None:
+            # Создаем фильтр для поиска по номеру инвойса
+            invoice_filter = Q(invoice_number__iexact=invoice_number)
+
+            # Создаем фильтр для поиска по названию товара (если указано)
+            product_filter = Q()
+            if product_name:
+                # Переносим в нижний регистр и разделяем на слова
+                product_name = product_name.lower()
+                product_name_parts = product_name.split()
+
+                # Создаем фильтра для поиска по названию товара (без учета регистра и частичное совпадение)
+                for part in product_name_parts:
+                    product_filter |= Q(product_name__iregex=part)
+
+            # Искать и фильтровать записи в таблицах Invoice и Product
+            invoices = Invoice.objects.filter(invoice_filter)
+            products = Product.objects.filter(product_filter)
+
+            # Если найдены соответствующие записи, вернуть их сериализованные данные
+            if invoices.exists() and products.exists():
+                invoice_serializer = InvoiceSerializer(invoices, many=True)
+                product_serializer = ProductSerializer(products, many=True)
+                return Response({
+                    'invoices': invoice_serializer.data,
+                    'products': product_serializer.data
+                })
+            else:
+                return Response({'message': 'Записей не найдено.'}, status=404)
+        else:
+            # Если номер инвойса не указан, вернуть всю таблицу PriceChange
+            price_changes = Price_change.objects.all()
+            price_change_serializer = Price_changeSerializer(price_changes, many=True)
+            return Response({'price_changes': price_change_serializer.data})
+
+
+
+
+
 
 
 
