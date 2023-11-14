@@ -101,6 +101,7 @@ class Price_change(models.Model):
     price_change_date = models.CharField("Дата изменения цены", max_length=100)
     expense_sale_price = models.CharField("Старая цена со склада", max_length=100)
     price_change_new = models.CharField("Новая цена", max_length=100)
+    quantity = models.CharField("Количество", blank=True, null=True, max_length=100)
 
     class Meta:
 

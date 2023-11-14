@@ -1,4 +1,10 @@
-from django.db.models import Q
+from django.db import transaction
+from django.db.models import Q, ExpressionWrapper
+from django.db.models import F, CharField, Sum
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
+
+from django.db.models.functions import Cast
 from rest_framework import viewsets, filters, mixins, status
 from rest_framework.views import APIView
 from .paginations import *
@@ -354,43 +360,65 @@ class StockViewSet(viewsets.ModelViewSet):
     # Замена строк где есть одинаковые параметры ввода и обновление последневведенных + замена id обновленного stock в таблицу income
     @receiver(pre_save, sender=Stock)
     def update_stock(sender, instance, **kwargs):
-        # Проверяем, существует ли запись с такими же product_id, product_country, product_price, product_vendor
-        existing_stock = Stock.objects.filter(product_id=instance.product_id,
-                                              product_country=instance.product_country,
-                                              product_price=instance.product_price,
-                                              product_vendor=instance.product_vendor).exclude(
-            id=instance.id).order_by('id').first()
+        # Проверяем, было ли уже обновление в рамках этой функции
+        if hasattr(instance, '_updating_stock'):
+            return
 
-        if existing_stock:
+        # Устанавливаем атрибут _updating_stock для избежания повторного вызова
+        instance._updating_stock = True
 
-            # Сохраняем старый идентификатор перед объединением
-            old_id = existing_stock.id
+        # Находим все записи с одинаковыми параметрами товаров
+        existing_stocks = Stock.objects.filter(
+            product_price=instance.product_price,
+            product_id=instance.product_id,
+            product_country=instance.product_country,
+            product_vendor=instance.product_vendor
+        ).exclude(id=instance.id).order_by('id')
 
+        if existing_stocks:
+            # Создаем список для объединения всех найденных записей, включая текущую
+            stocks_to_merge = [instance]
 
-            # Обновляем значения полей в соответствии с требованиями
+            earliest_barcode = instance.product_barcode
+
+            for existing_stock in existing_stocks:
+                # Добавляем найденные записи в список
+                stocks_to_merge.append(existing_stock)
+
+                # Проверяем, является ли текущий barcode самым ранним
+                if existing_stock.product_barcode < earliest_barcode:
+                    earliest_barcode = existing_stock.product_barcode
+
+            # Вычисляем суммы для объединения
+            total_expense_full_price = sum(float(stock.expense_full_price) for stock in stocks_to_merge)
+            total_product_quantity = sum(int(stock.product_quantity) for stock in stocks_to_merge)
+
+            # Обновляем текущую запись с общими значениями
             instance.expense_allowance = existing_stock.expense_allowance
             instance.product_reserve = existing_stock.product_reserve
             instance.product_vat = existing_stock.product_vat
-            instance.product_barcode = existing_stock.product_barcode
-            instance.product_price_provider = existing_stock.product_price_provider  #цена с надбавкой
-            instance.expense_full_price = str(float(existing_stock.expense_full_price) + float(instance.expense_full_price)) #общая цена с ндс
-            instance.product_quantity = str(int(existing_stock.product_quantity) + int(instance.product_quantity))
+            instance.product_barcode = earliest_barcode  # баркод ранний самый
+            instance.product_price_provider = existing_stock.product_price_provider
+            instance.expense_full_price = str(total_expense_full_price)
+            instance.product_quantity = str(total_product_quantity)
 
-            # Обновляем stock_id в связанных записях в таблице Income (удаляется id склада в приходе когда списываем товар)
-            #удалить эту строчку чтоб товар не удалялся
-            incomes = Income.objects.filter(stock_id=old_id)
-            for income in incomes:
-                income.stock_id = instance.id
-                income.save()
+            # Сохраняем новую запись Stock
+            instance.save()
 
-            # Удаляем старые записи в таблице Stock
-            if existing_stock.id != instance.id:
-                existing_stock.delete()
+            # Обновляем связанные записи в модели Income
+            for stock_to_merge in stocks_to_merge:
+                incomes = Income.objects.filter(stock_id=stock_to_merge.id)
+                for income in incomes:
+                    # Обновляем stock_id на id новой записи
+                    income.stock_id = instance.id
+                    income.save()
 
+            # Удаляем все объединенные записи, кроме текущей
+            for stock_to_merge in stocks_to_merge[1:]:
+                stock_to_merge.delete()
 
-
-
-
+            # Удаляем атрибут _updating_stock после завершения
+        del instance._updating_stock
 
 
 
@@ -450,6 +478,8 @@ class StockViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(stock, many=True) #filter- выводит два одинковых ID , get - один товар(удаляем many=TRUE)
         return Response(serializer.data)
 
+
+
     # Поиск на складе по названию товара по любой букве без учета регистра (api/stocks/search_by_name/?name=а)
     # Поиск по названию без учета регистра - iregex, если по любой букве - icontains
     @action(detail=False, methods=['GET'])
@@ -500,7 +530,7 @@ class Price_changeViewSet(viewsets.ModelViewSet):
     queryset = Price_change.objects.all().order_by('-id')
     serializer_class = Price_changeSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['']
+    search_fields = ['income__id'] #?search
     pagination_class = APIListPagination
 
     def get_serializer_class(self):
@@ -508,7 +538,8 @@ class Price_changeViewSet(viewsets.ModelViewSet):
             return Price_changeCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
         return Price_changeDetailSerializer
 
-    @action(detail=False, methods=['GET'])    #Поиск по номеру инвойса и название товара с учетом фильтров (api/prices_change/search_by_invoice_product/?invoice_number=1&product_name=асфа)
+    @action(detail=False, methods=[
+        'GET'])  # Поиск по номеру инвойса и название товара с учетом фильтров (api/prices_change/search_by_invoice_product/?invoice_number=1&product_name=асфа)
     def search_by_invoice_product(self, request):
         invoice_number = request.GET.get('invoice_number')
         product_name = request.GET.get('product_name')
@@ -547,14 +578,6 @@ class Price_changeViewSet(viewsets.ModelViewSet):
             price_changes = Price_change.objects.all()
             price_change_serializer = Price_changeSerializer(price_changes, many=True)
             return Response({'price_changes': price_change_serializer.data})
-
-
-
-
-
-
-
-
 
 
 class RetailViewSet(viewsets.ModelViewSet):
