@@ -86,6 +86,7 @@ class Invoice(models.Model):
     product_price_nds = models.CharField("Цена с НДС", max_length=100)
 
 
+
     class Meta:
         verbose_name = "Накладная"
         verbose_name_plural = "Накладные"
@@ -275,6 +276,11 @@ class Stock(models.Model):
     product_vat = models.CharField("НДС", max_length=255)
     expense_full_price = models.CharField("Общая цена с ндс", max_length=250, null=True, blank=True)
     product_barcode = models.CharField("Штрихкод", max_length=255)
+
+    #def save(self, *args, **kwargs):
+   #   if not self.Stock:
+    #     self.stock_id = Stock(self.stock)
+     # super(Stock, self).save(*args, **kwargs)
 
 
 
