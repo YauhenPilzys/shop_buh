@@ -403,7 +403,7 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
 
 
     # Поиск expense_item по expense_id от даты и по дату (api/expenses_item/filter_by_date_and_expense/?expense_id=476&start_date=2023-11-01&end_date=2023-12-31)
-    @action(detail=False, methods=['GET'])
+    @action(detail=False, methods=['get'])
     def filter_by_date_and_expense(self, request):
         queryset = self.get_queryset()
 
@@ -449,12 +449,15 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
 
 
 
-class PaymentCalculations(APIView):
+class UpdateStock(APIView):
     """ Объединение товаров с одинаковыми параметрами """
     #permission_classes = (IsAuthenticated,) - пользоваться залогеным только можно
 
     def post(self, request, prod_id):
-        prod = Stock.objects.get(pk=prod_id)
+        try:
+            prod = Stock.objects.get(pk=prod_id)
+        except Stock.DoesNotExist:
+            raise Http404("Stock does not exist")
         # Используем транзакцию для обеспечения целостности данных
         with transaction.atomic():
             # Находим все записи с заданными параметрами товаров
@@ -465,44 +468,47 @@ class PaymentCalculations(APIView):
                 product_vendor=prod.product_vendor
             ).exclude(product_barcode="").order_by('id')
 
-            if existing_stocks:
-                # Создаем список для объединения всех найденных записей
-                stocks_to_merge = existing_stocks
-
-                earliest_barcode = min(stock.product_barcode for stock in stocks_to_merge)
-
-                # Вычисляем суммы для объединения
-                total_expense_full_price = sum(float(stock.expense_full_price) for stock in stocks_to_merge)
-                total_product_quantity = sum(int(stock.product_quantity) for stock in stocks_to_merge)
-
-                # Создаем новую запись Stock с общими значениями
-                new_stock = Stock(
+            if existing_stocks.count() > 1:
+                # Проверяем, что не существует уже объединенной записи для данной группы товаров
+                existing_merged_stock = Stock.objects.filter(
                     product_id=prod.product_id,
                     product_price=prod.product_price,
                     product_country=prod.product_country,
                     product_vendor=prod.product_vendor,
-                    product_reserve=prod.product_reserve,
-                    product_price_provider=prod.product_price_provider,
-                    expense_allowance=prod.expense_allowance,
-                    product_vat=prod.product_vat,
-                    product_barcode=earliest_barcode,
-                    expense_full_price=str(total_expense_full_price),
-                    product_quantity=str(total_product_quantity)
-                )
-                new_stock.save()
+                    product_barcode__isnull=False
+                ).exclude(id__in=existing_stocks).first()
 
-                # Обновляем связанные записи в модели Income
-                for stock_to_merge in stocks_to_merge:
-                    incomes = Income.objects.filter(stock_id=stock_to_merge.pk)
-                    for income in incomes:
-                        # Обновляем stock_id на id новой записи
-                        income.stock_id = new_stock.pk
-                        income.save()
+                if not existing_merged_stock:
+                    # Создаем список для объединения всех найденных записей
+                    stocks_to_merge = existing_stocks
 
-                # Удаляем все объединенные записи, кроме новой
-                for stock_to_merge in stocks_to_merge:
-                    if stock_to_merge != new_stock:
-                        stock_to_merge.delete()
+                    earliest_barcode = min(stock.product_barcode for stock in stocks_to_merge)
+
+                    # Вычисляем суммы для объединения
+                    total_expense_full_price = sum(float(stock.expense_full_price) for stock in stocks_to_merge)
+                    total_product_quantity = sum(int(stock.product_quantity) for stock in stocks_to_merge)
+
+                    # Создаем новую запись Stock с общими значениями
+                    new_stock = Stock.objects.create(
+                        product_id=prod.product_id,
+                        product_price=prod.product_price,
+                        product_country=prod.product_country,
+                        product_vendor=prod.product_vendor,
+                        product_reserve=prod.product_reserve,
+                        product_price_provider=prod.product_price_provider,
+                        expense_allowance=prod.expense_allowance,
+                        product_vat=prod.product_vat,
+                        product_barcode=earliest_barcode,
+                        expense_full_price=str(total_expense_full_price),
+                        product_quantity=str(total_product_quantity)
+                    )
+
+                    # Обновляем связанные записи в модели Income
+                    Income.objects.filter(stock__in=stocks_to_merge).update(stock=new_stock)
+
+                    # Удаляем все объединенные записи, кроме новой
+                    stocks_to_merge.exclude(id=new_stock.id).delete()
+
         return Response()
 
 
