@@ -66,7 +66,8 @@ class Product(models.Model):
 
 class Group(models.Model):
     #Группы справочник
-    group_name = models.CharField("Название группы", max_length=255)
+    group_name = models.CharField("Название группы", max_length=100)
+    group_level = models.CharField("Уровень раздела", max_length=100, blank=True, null=True)
 
     class Meta:
         verbose_name = "Группа"
@@ -97,7 +98,8 @@ class Invoice(models.Model):
 
 class Price_change(models.Model):
     #Изменение цены (корректировка)
-    income = models.ForeignKey('Income', on_delete=models.CASCADE, verbose_name="Приход")
+    income = models.ForeignKey('Income', on_delete=models.CASCADE, verbose_name="Накладная")
+    old_income = models.CharField("Старая накладная", max_length=100, blank=True, null=True)
     product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
     price_change_date = models.CharField("Дата изменения цены", max_length=100)
     expense_sale_price = models.CharField("Старая цена со склада", max_length=100)
@@ -154,7 +156,7 @@ class Expense(models.Model):
     expense_vat = models.CharField("Сумма НДС ", max_length=100, blank=True, null=True)
     expense_date = models.DateField("Дата продажи",  blank=False)
     number_proxy = models.CharField("Номер доверенности", max_length=100, blank=True, null=True)
-    date_proxy = models.CharField("Дата доверенности", max_length=100)     # могут быть пустые
+    date_proxy = models.CharField("Дата доверенности", max_length=100, blank=True, null=True)
     proxy_user = models.CharField("Кем выдана довереннось", max_length=100, blank=True, null=True)
     expense_print = models.CharField("Печатана ли накладная", max_length=100, blank=True, null=True)
 
@@ -228,10 +230,6 @@ class Retail(models.Model):
 
 
 
-
-
-
-
 class Bank(models.Model):
     #Банк справочник
     bank_name = models.CharField("Название банка", max_length=255)
@@ -276,14 +274,6 @@ class Stock(models.Model):
     product_vat = models.CharField("НДС", max_length=255)
     expense_full_price = models.CharField("Общая цена с ндс", max_length=250, null=True, blank=True)
     product_barcode = models.CharField("Штрихкод", max_length=255)
-
-    #def save(self, *args, **kwargs):
-   #   if not self.Stock:
-    #     self.stock_id = Stock(self.stock)
-     # super(Stock, self).save(*args, **kwargs)
-
-
-
 
 
     class Meta:

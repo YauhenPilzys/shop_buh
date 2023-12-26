@@ -1,3 +1,5 @@
+import functools
+import logging
 from sqlite3 import IntegrityError
 from django.http import JsonResponse, Http404
 
@@ -12,9 +14,10 @@ from django.db.models import F, Sum, Min
 from datetime import datetime
 from rest_framework import viewsets, filters, mixins, status
 from rest_framework.views import APIView
-from django.db.models import Sum
-from django.db.models.functions import Coalesce
-from django.core.exceptions import ObjectDoesNotExist
+from django.http import Http404
+from django.db.utils import IntegrityError
+from django.utils import timezone
+
 
 
 from .paginations import *
@@ -73,7 +76,7 @@ class ProviderViewSet(viewsets.ModelViewSet):
         paginator.page_size = page_size
 
         if not query:
-            providers = Provider.objects.all()  # Возвращает все записи, если 'name' не задан
+            providers = Provider.objects.all().order_by('-id')  # Возвращает все записи, если 'name' не задан
         else:
             providers = Provider.objects.filter(provider_name__iregex=query).order_by('-id')
 
@@ -99,7 +102,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 
 
-    def get_serializer_class(self):          #сериализатор для POST и PACT-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
+    def get_serializer_class(self):          #сериализатор для POST и PATCH-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
         if self.request.method == 'POST':
             return InvoiceCreateSerializer
         elif self.request.method == 'PATCH':
@@ -107,6 +110,24 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return InvoiceSerializer
 
 
+
+
+    #Поиск с даты по дату по двум параметрам + пагинация  (http://127.0.0.1:8000/api/invoices/?date=min (max))
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        # Получаем параметр order_by из запроса
+        order_by = self.request.query_params.get('date', None)
+
+        # Сортируем записи в зависимости от параметра order_by
+        if order_by == 'min':
+            # Если указан date=min, сортируем по возрастанию
+            queryset = queryset.order_by('product_date')
+        elif order_by == 'max':
+            # Если указан date=max, сортируем по убыванию
+            queryset = queryset.order_by('-product_date')
+
+        return queryset
 
 
 
@@ -125,7 +146,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         paginator.page_size = page_size
 
         if not query:
-            invoices = Invoice.objects.all()  # Возвращает все записи, если 'name' не задан
+            invoices = Invoice.objects.all().order_by('-id')  # Возвращает все записи, если 'name' не задан
         else:
             invoices = Invoice.objects.filter(invoice_number__iregex=query).order_by('-id')
 
@@ -164,7 +185,7 @@ class ClientViewSet(viewsets.ModelViewSet):  #справочник
         paginator.page_size = page_size
 
         if not query:
-            clients = Client.objects.all()  # Возвращает все записи, если 'name' не задан
+            clients = Client.objects.all().order_by('-id')  # Возвращает все записи, если 'name' не задан
         else:
             clients = Client.objects.filter(client_name__iregex=query).order_by('-id')
 
@@ -195,22 +216,38 @@ class ProductViewSet(viewsets.ModelViewSet):  #справочник
 
         # Делаем пагинацию
         paginator = PageNumberPagination()
+        paginator.page_size = 10  # Установите желаемый размер страницы
 
-        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
-        page_size = int(request.query_params.get('page_size', 5))
-        paginator.page_size = page_size
+        if query:
+            # Если запрос не пустой, разбиваем его на слова
+            words = query.split()
 
-        if not query:
-            products = Product.objects.all()  # Возвращает все записи, если 'name' не задан
+            # Формируем Q объекты для каждого слова
+            queries = [Q(product_name__iregex=word) for word in words]
+
+            # Используем functools.reduce для объединения Q объектов с оператором 'и'
+            combined_query = functools.reduce(lambda x, y: x & y, queries)
+
+            # Фильтруем товары по объединенному запросу
+            products = Product.objects.filter(combined_query).order_by('-id')
         else:
-            products = Product.objects.filter(product_name__iregex=query).order_by('-id')
+            # Если запрос пустой, выводим все записи
+            products = Product.objects.all().order_by('-id')
 
         # Применяем пагинацию к результатам
         paginated_products = paginator.paginate_queryset(products, request)
 
         serializer = ProductSerializer(paginated_products, many=True)
-        return paginator.get_paginated_response(serializer.data)
 
+        # Вручную создаем ответ, включая информацию о пагинации
+        response_data = {
+            'count': paginator.page.paginator.count,
+            'next': paginator.get_next_link(),
+            'previous': paginator.get_previous_link(),
+            'results': serializer.data
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 
@@ -238,13 +275,72 @@ class IncomeViewSet(viewsets.ModelViewSet):
         return IncomeSerializer
 
 
-
-
-    def get_queryset(self):   #Поиск прихода по id_накладной (?invoice_id=2)
+    def get_queryset(self):   #Поиск по stock_id и invoice_id (api/incomes/invoice_id=655&?stock_id=1344)
         invoice_id = self.request.query_params.get('invoice_id')
+        stock_id = self.request.query_params.get('stock_id')
+
+        queryset = Income.objects.all()
+
         if invoice_id:
-            return Income.objects.filter(invoice_id=invoice_id)
-        return super().get_queryset()
+            queryset = queryset.filter(invoice_id=invoice_id)
+
+        if stock_id:
+            queryset = queryset.filter(stock__id=stock_id)
+
+        return queryset
+
+
+
+    # Поиск с даты по дату по двум параметрам + пагинация  (http://127.0.0.1:8000/api/incomes/?date=min (max))?
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        # Получаем параметр order_by из запроса
+        order_by = self.request.query_params.get('date', None)
+
+        # Сортируем записи в зависимости от параметра order_by
+        if order_by == 'min':
+            # Если указан date=min, сортируем по возрастанию
+            queryset = queryset.order_by('invoice__product_date')
+        elif order_by == 'max':
+            # Если указан date=max, сортируем по убыванию
+            queryset = queryset.order_by('-invoice__product_date')
+
+        return queryset
+
+
+
+
+     # Поиск получить где параметрами будут : 1) даты с по, 2) дата с по + клиент, 3) дата с по + товар, 4)дата с по + клиент + товар
+     # (incomes/filter_by_income/?start_date=2023-01-01&end_date=2023-12-31&providers_id=2&product_id=1)
+    @action(detail=False, methods=['get'])
+    def filter_by_income(self, request):
+        queryset = self.get_queryset()
+
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        provider_id = request.query_params.get('providers_id')
+        product_id = request.query_params.get('product_id')
+
+        filters = Q()
+
+        if start_date and end_date:
+            filters &= Q(invoice__product_date__range=(start_date, end_date))
+        elif start_date:
+            filters &= Q(invoice__product_date__gte=start_date)
+        elif end_date:
+            filters &= Q(invoice__product_date__lte=end_date)
+
+        if provider_id:
+            filters &= Q(invoice__providers_id=provider_id)
+
+        if product_id:
+            filters &= Q(product_id=product_id)
+
+        queryset = queryset.filter(filters)
+
+        serializer = IncomeSerializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 
@@ -299,14 +395,14 @@ class IncomeViewSet(viewsets.ModelViewSet):
 
 
 
-
-
 class BankViewSet(viewsets.ModelViewSet): #справочник
     queryset = Bank.objects.all().order_by('-id')
     serializer_class = BankSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['bank_name']
     pagination_class = APIListPagination
+
+
 
     # Поиск банка по букве в независимости от регистра и сортировка 5 по ID (api/banks/search_by_name/?name=)
     @action(detail=False, methods=['GET'])
@@ -321,7 +417,7 @@ class BankViewSet(viewsets.ModelViewSet): #справочник
         paginator.page_size = page_size
 
         if not query:
-            banks = Bank.objects.all()  # Возвращает все записи, если 'name' не задан
+            banks = Bank.objects.all().order_by('-id')  # Возвращает все записи, если 'name' не задан
         else:
             banks = Bank.objects.filter(bank_name__iregex=query).order_by('-id')
 
@@ -335,6 +431,8 @@ class BankViewSet(viewsets.ModelViewSet): #справочник
 
 
 
+
+
 class ExpenseViewSet(viewsets.ModelViewSet):
     queryset = Expense.objects.all().order_by('-id')
     serializer_class = ExpenseSerializer
@@ -342,11 +440,20 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     search_fields = ['']
     pagination_class = APIListPagination
 
+    def get_serializer_class(
+            self):  # сериализатор для POST и PATCH-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
+        if self.request.method == 'POST':
+            return ExpenseCreateSerializer
+        elif self.request.method == 'PATCH':
+            return ExpenseCreateSerializer
+        return ExpenseSerializer
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return ExpenseCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
-        return ExpenseDetailSerializer
+    # def get_serializer_class(self):
+    #     if self.action == 'create':
+    #         return ExpenseCreateSerializer  #сериализатор для POST-запросов (GET показывает весь список, POST оставляет ID)
+    #     return ExpenseDetailSerializer
+
+
 
     # Поиск expense по expense_number букве в независимости от регистра и сортировка 5 по ID (api/expenses/search_by_name/?name=)
     @action(detail=False, methods=['GET'])
@@ -361,7 +468,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         paginator.page_size = page_size
 
         if not query:
-            expenses = Expense.objects.all()  # Возвращает все записи, если 'name' не задан
+            expenses = Expense.objects.all().order_by('-id')  # Возвращает все записи, если 'name' не задан
         else:
             expenses = Expense.objects.filter(expense_number__iregex=query).order_by('-id')
 
@@ -375,16 +482,17 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
 
 
-
-
-
-
 class Expense_itemViewSet(viewsets.ModelViewSet):
     queryset = Expense_item.objects.all().order_by('-id')
     serializer_class = Expense_itemSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['']
     pagination_class = APIListPagination
+
+
+
+
+
 
 
     def get_serializer_class(self):
@@ -402,23 +510,29 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
 
 
 
-    # Поиск expense_item по expense_id от даты и по дату (api/expenses_item/filter_by_date_and_expense/?expense_id=476&start_date=2023-11-01&end_date=2023-12-31)
+
+    #Поиск по параметрам : 1) даты с по, 2) дата с по + клиент, 3) дата с по + товар, 4)дата с по + клиент + товар
+    # filter_by_expense_item/?start_date=2023-01-01&end_date=2023-12-31&client_id=10&product_id=94
     @action(detail=False, methods=['get'])
-    def filter_by_date_and_expense(self, request):
+    def filter_by_expense_item(self, request):
         queryset = self.get_queryset()
 
-        invoice_id = request.query_params.get('expense_id')
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
-
-        if invoice_id:
-            queryset = queryset.filter(expense__id=invoice_id)
+        client_id = request.query_params.get('client_id')
+        product_id = request.query_params.get('product_id')
 
         if start_date:
             queryset = queryset.filter(expense__expense_date__gte=start_date)
 
         if end_date:
             queryset = queryset.filter(expense__expense_date__lte=end_date)
+
+        if client_id:
+            queryset = queryset.filter(expense__client__id=client_id)
+
+        if product_id:
+            queryset = queryset.filter(product__id=product_id)
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
@@ -450,15 +564,14 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
 
 
 class UpdateStock(APIView):
-    """ Объединение товаров с одинаковыми параметрами """
-    #permission_classes = (IsAuthenticated,) - пользоваться залогеным только можно
+    """ Объединение записей """
 
     def post(self, request, prod_id):
         try:
             prod = Stock.objects.get(pk=prod_id)
         except Stock.DoesNotExist:
-            raise Http404("Stock does not exist")
-        # Используем транзакцию для обеспечения целостности данных
+            raise Http404("Товар не существует")
+
         with transaction.atomic():
             # Находим все записи с заданными параметрами товаров
             existing_stocks = Stock.objects.filter(
@@ -468,7 +581,7 @@ class UpdateStock(APIView):
                 product_vendor=prod.product_vendor
             ).exclude(product_barcode="").order_by('id')
 
-            if existing_stocks.count() > 1:
+            if existing_stocks:
                 # Проверяем, что не существует уже объединенной записи для данной группы товаров
                 existing_merged_stock = Stock.objects.filter(
                     product_id=prod.product_id,
@@ -488,28 +601,48 @@ class UpdateStock(APIView):
                     total_expense_full_price = sum(float(stock.expense_full_price) for stock in stocks_to_merge)
                     total_product_quantity = sum(int(stock.product_quantity) for stock in stocks_to_merge)
 
-                    # Создаем новую запись Stock с общими значениями
-                    new_stock = Stock.objects.create(
-                        product_id=prod.product_id,
-                        product_price=prod.product_price,
-                        product_country=prod.product_country,
-                        product_vendor=prod.product_vendor,
-                        product_reserve=prod.product_reserve,
-                        product_price_provider=prod.product_price_provider,
-                        expense_allowance=prod.expense_allowance,
-                        product_vat=prod.product_vat,
-                        product_barcode=earliest_barcode,
-                        expense_full_price=str(total_expense_full_price),
-                        product_quantity=str(total_product_quantity)
-                    )
+                    # Проверяем количество товара
+                    if total_product_quantity == 0:
+                        # Если количество равно 0, сохраняем значение stock
+                        last_deleted_stock = stocks_to_merge.first().id
 
-                    # Обновляем связанные записи в модели Income
-                    Income.objects.filter(stock__in=stocks_to_merge).update(stock=new_stock)
+                        # Удаляем все объединенные записи, кроме последней
+                        stocks_to_merge.exclude(id=last_deleted_stock).delete()
 
-                    # Удаляем все объединенные записи, кроме новой
-                    stocks_to_merge.exclude(id=new_stock.id).delete()
+                        # Удаление из модели Income связанных записей с удаленными Stock
+                        Income.objects.filter(stock=last_deleted_stock).delete()
+                    else:
+                        # Создаем новую запись Stock с общими значениями
+                        new_stock = Stock.objects.create(
+                            product_id=prod.product_id,
+                            product_price=prod.product_price,
+                            product_country=prod.product_country,
+                            product_vendor=prod.product_vendor,
+                            product_reserve=prod.product_reserve,
+                            product_price_provider=prod.product_price_provider,
+                            expense_allowance=prod.expense_allowance,
+                            product_vat=prod.product_vat,
+                            product_barcode=earliest_barcode,
+                            expense_full_price=str(total_expense_full_price),
+                            product_quantity=str(total_product_quantity)
+                        )
 
-        return Response()
+                        # Обновляем связанные записи в модели Income
+                        Income.objects.filter(stock__in=stocks_to_merge).update(stock_id=new_stock.id)
+
+                        # Удаляем все объединенные записи, кроме новой
+                        stocks_to_merge.exclude(id=new_stock.id).delete()
+
+                        # Возвращаем информацию о новой записи и объединенных записях
+                        merged_stocks_info = {
+                            "new_stock": {"id": new_stock.id},
+                            "merged_stocks": [{"id": stock.id} for stock in stocks_to_merge]
+                        }
+                        return Response(merged_stocks_info)
+
+                    return Response({})
+
+
 
 
 class StockViewSet(viewsets.ModelViewSet):
@@ -538,46 +671,76 @@ class StockViewSet(viewsets.ModelViewSet):
 
 
 
+
+    #Поиск с даты по дату + товар (filter_by_stock/?start_date=2023-01-01&end_date=2023-12-31&product_id=84)
+    @action(detail=False, methods=['get'])
+    def filter_by_stock(self, request):
+        queryset = self.get_queryset()
+
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        product_id = request.query_params.get('product_id')
+
+        if start_date:
+            queryset = queryset.filter(income__invoice__product_date__gte=start_date)
+
+        if end_date:
+            queryset = queryset.filter(income__invoice__product_date__lte=end_date)
+
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
+
+
+        serializer = StockSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+
+
+
+
     # Замена строк где есть одинаковые параметры ввода и обновление последневведенных + замена id обновленного stock в таблицу income
-    #@receiver(pre_save, sender=Stock)
+    #@receiver(pre_save, sender=Stock) - это выше в отдельной функции class UpdateStock(APIView):
 
 
 
     # Поиск товаров от одного до пяти слов и артикула. Список всех товаров связанных с первым словом +  список всех товаров с вторым словом и так далее
-    #(/api/stocks/filter_by_keyword/?query=рамка+дом+артикул в числовом значении)
+    #(/api/stocks/filter_by_keyword/?query=рамка+дом+артикул+страна в числовом значении)
 
     @action(detail=False, methods=['GET'])
     def filter_by_keyword(self, request):
         query = request.query_params.get('query', '')
-        keywords = query.split()
+        country_filter = request.query_params.get('country', '')
 
-        queryset = Stock.objects.all()
-        results = queryset
+        queryset = Stock.objects.all().order_by('-id')
 
-        if len(keywords) == 1:
-            single_keyword = keywords[0]
-            # Поиск по одному слову в названии и артикулу товара
-            results = results.filter(
-                Q(product__product_name__iregex=single_keyword) |
-                Q(product_vendor__iregex=single_keyword)
-            )
-        elif len(keywords) >= 2 and len(keywords) <= 5:
-            # Поиск по 2-5 словам в названии и артикулу товара
+        if query or country_filter:
+            keywords = query.split()
+            product_name_query = Q()
+
             for keyword in keywords:
-                results = results.filter(
-                    Q(product__product_name__iregex=keyword) |
-                    Q(product_vendor__iregex=keyword)
-                )
+                product_name_query |= Q(product__product_name__icontains=keyword)
 
-        # Применяем пагинацию к записям
+            results = queryset.filter(
+                product_name_query |
+                Q(product_vendor__icontains=query) |
+                Q(product_country__icontains=query)
+            )
+
+            if country_filter:
+                results = results.filter(product_country__icontains=country_filter)
+        else:
+            # Both query and country_filter are empty, return all rows
+            results = queryset
+
         self.pagination_class = APIListPagination
         page = self.paginate_queryset(results)
+
         if page is not None:
             serializer = StockSerializer(page, many=True)
             return self.get_paginated_response(serializer.data)
 
         serializer = StockSerializer(results, many=True)
-
         return Response({'results': serializer.data})
 
 
