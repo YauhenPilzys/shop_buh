@@ -26,6 +26,7 @@ from accounting_app.views import *
 
 
 
+
 schema_view = get_schema_view(
     openapi.Info(
         title="API for SHOP",
@@ -66,7 +67,7 @@ urlpatterns = [
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
     path('api/payment_calculations/<int:prod_id>/', UpdateStock.as_view()),
-
+    path('api/token/', ObtainTokenView.as_view(), name='token_obtain')
 
 
 

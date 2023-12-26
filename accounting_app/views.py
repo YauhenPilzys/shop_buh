@@ -1,25 +1,9 @@
 import functools
-import logging
-from sqlite3 import IntegrityError
-from django.http import JsonResponse, Http404
-
 from django.db import transaction
-from django.db.models import Q, ExpressionWrapper
-from django.db.models import F, CharField, Sum
-from django.db.models.signals import pre_save
-from django.dispatch import receiver
-from django.db.models import F, ExpressionWrapper, DecimalField, IntegerField, Value
-from django.db.models.functions import Cast
-from django.db.models import F, Sum, Min
-from datetime import datetime
+from django.db.models import Q
 from rest_framework import viewsets, filters, mixins, status
 from rest_framework.views import APIView
 from django.http import Http404
-from django.db.utils import IntegrityError
-from django.utils import timezone
-
-
-
 from .paginations import *
 from .serializers import ProductSerializer, ClientSerializer, ProviderSerializer, GroupSerializer, InvoiceSerializer, \
     BankSerializer, ExpenseSerializer, StockSerializer, Price_changeSerializer, InvoiceCreateSerializer, \
@@ -28,20 +12,35 @@ from .serializers import ProductSerializer, ClientSerializer, ProviderSerializer
     IncomeDetailSerializer, Expense_itemSerializer, RetailSerializer, ExpenseCreateSerializer, ExpenseDetailSerializer, \
     Expense_itemCreateSerializer, Expense_itemDetailSerializer, RetailCreateSerializer, RetailDetailSerializer, \
     Price_changeCreateSerializer, Price_changeDetailSerializer, ContractCreateSerializer, \
-    ContractDetailSerializer, ContractSerializer, CountrySerializer
+    ContractDetailSerializer, ContractSerializer, CountrySerializer, UserSerializer
 
-from rest_framework import generics
-from django.shortcuts import get_object_or_404
-from django.http import JsonResponse
 from .models import *
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action
+from django.contrib.auth import authenticate
+from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.db.models.signals import post_save
-from decimal import Decimal
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+from .serializers import UserSerializer, TokenObtainPairSerializer, TokenObtainPairResponseSerializer, TokenRefreshSerializer
+from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 
 
+class ObtainTokenView(TokenObtainPairView):
+    def post(self, request, *args, **kwargs):
+        username = request.data.get('username')
+        password = request.data.get('password')
 
+        user = authenticate(request, username=username, password=password)
 
+        if user is not None:
+            refresh = RefreshToken.for_user(user)
+            response_data = {
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+        else:
+            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 class ProviderViewSet(viewsets.ModelViewSet):
     queryset = Provider.objects.all().order_by('-id')

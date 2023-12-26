@@ -1,6 +1,19 @@
 from django.db import models
-from django.db.models.signals import pre_save
-from django.dispatch import receiver
+
+
+
+
+class User(models.Model):
+    username = models.CharField("Имя пользователя", max_length=100)
+    password = models.CharField("Пароль", max_length=100)
+
+    class Meta:
+         verbose_name = "Пользователь"
+         verbose_name_plural = "Пользователи"
+
+    def __str__(self):
+        return self.username
+
 
 
 class Client(models.Model):

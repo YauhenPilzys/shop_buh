@@ -1,6 +1,24 @@
 from rest_framework import serializers
 from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item, \
-    Retail, Contract, Country
+    Retail, Contract, Country, User
+
+
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'password')
+
+class TokenObtainPairSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+class TokenObtainPairResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+
+class TokenRefreshSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
 
 
 
