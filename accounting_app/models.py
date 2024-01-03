@@ -97,6 +97,7 @@ class Invoice(models.Model):
     invoice_number = models.CharField("Номер накладной", max_length=100)
     product_date = models.DateField("Дата поступления ", blank=False)
     product_price = models.CharField("Цена по накладной", max_length=100)
+    currency = models.CharField("Валюта", max_length=100, blank=True, null=True)
     product_price_nds = models.CharField("Цена с НДС", max_length=100)
 
 
@@ -117,6 +118,7 @@ class Price_change(models.Model):
     price_change_date = models.CharField("Дата изменения цены", max_length=100)
     expense_sale_price = models.CharField("Старая цена со склада", max_length=100)
     price_change_new = models.CharField("Новая цена", max_length=100)
+    currency = models.CharField("Валюта", max_length=100, blank=True, null=True)
     quantity = models.CharField("Количество", blank=True, null=True, max_length=100)
 
     class Meta:
@@ -144,6 +146,7 @@ class Income(models.Model):
     income_vat = models.CharField("НДС", max_length=255)
     income_total_vat = models.CharField("Сумма НДС", max_length=100)
     income_total_price_vat = models.CharField("Полная цена с ндс", max_length=100)
+    currency = models.CharField("Валюта", max_length=100, blank=True, null=True)
     income_allowance = models.CharField("Надбавка", max_length=100)
 
 
@@ -166,6 +169,7 @@ class Expense(models.Model):
     expense_contract = models.CharField("Номер договора", max_length=100, blank=True, null=True)
     expense_price = models.CharField("Стоимость", max_length=100)
     expense_price_allowance = models.CharField("Стоимость с надбавкой", max_length=100)
+    currency = models.CharField("Валюта", max_length=100, blank=True, null=True)
     expense_vat = models.CharField("Сумма НДС ", max_length=100, blank=True, null=True)
     expense_date = models.DateField("Дата продажи",  blank=False)
     number_proxy = models.CharField("Номер доверенности", max_length=100, blank=True, null=True)
@@ -193,6 +197,7 @@ class Expense_item(models.Model):
     product_quantity = models.CharField("Количество товара для продажи", max_length=100)
     amount_vat = models.CharField("Сумма НДС", max_length=100)
     price_with_vat = models.CharField("Стоимость с НДС", max_length=100)
+    currency = models.CharField("Валюта", max_length=100, blank=True, null=True)
     product_vat = models.CharField("НДС", max_length=20)
     product_allowance = models.CharField("Надбавка", max_length=100, blank=True, null=True)
     product_country = models.CharField("Страна товара", max_length=100)
@@ -227,6 +232,7 @@ class Retail(models.Model):
     product_quantity = models.CharField("Количество товара", max_length=100)
     total_price_vat = models.CharField("Общая цена с НДС", max_length=100)
     full_price = models.CharField("Общая цена с ндс и надбавкой", max_length=100)
+    currency = models.CharField("Валюта", max_length=100, blank=True, null=True)
     date_item = models.DateField("Дата выставления чека")
     #paymant оплата картой или наличными добавить
 
@@ -284,6 +290,7 @@ class Stock(models.Model):
     product_price_provider = models.CharField("Цена с надбавкой", max_length=255)
     expense_allowance = models.CharField("Надбавка", max_length=100)
     product_price = models.CharField("Цена", max_length=255)
+    currency = models.CharField("Валюта", max_length=100, blank=True, null=True)
     product_vat = models.CharField("НДС", max_length=255)
     expense_full_price = models.CharField("Общая цена с ндс", max_length=250, null=True, blank=True)
     product_barcode = models.CharField("Штрихкод", max_length=255)
@@ -297,12 +304,6 @@ class Stock(models.Model):
         return f" id {self.id} - {self.product} - количество {self.product_quantity} шт "
 
 
-
-
-#@receiver(pre_save, sender=Stock) #перемножить две строчки значением string (строковое значение)
-#def calculate_multiplication_result(sender, instance, **kwargs):
-#    result = str(int(instance.product_quantity) * int(instance.product_price))
-#    instance.expense_full_price = result
 
 
 

@@ -1,8 +1,8 @@
 from rest_framework import serializers
-from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item, \
-    Retail, Contract, Country, User
+from rest_framework_jwt.serializers import User
 
-
+from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item,\
+    Retail, Contract, Country
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -317,9 +317,6 @@ class CountrySerializer(serializers.ModelSerializer):
     class Meta:
         model = Country
         fields = '__all__'
-
-
-
 
 
 
