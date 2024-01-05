@@ -1,26 +1,25 @@
 from rest_framework import serializers
-from rest_framework_jwt.serializers import User
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item,\
     Retail, Contract, Country
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ('id', 'username', 'password')
 
-class TokenObtainPairSerializer(serializers.Serializer):
-    username = serializers.CharField()
-    password = serializers.CharField(write_only=True)
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        return token
 
-class TokenObtainPairResponseSerializer(serializers.Serializer):
-    access = serializers.CharField()
-
-class TokenRefreshSerializer(serializers.Serializer):
-    refresh = serializers.CharField()
-
-
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data['id'] = self.user.id
+        data['username'] = self.user.username
+        data['first_name'] = self.user.first_name
+        data['last_name'] = self.user.last_name
+        return data
 
 class BankSerializer(serializers.ModelSerializer):
     class Meta:
@@ -72,6 +71,7 @@ class BankCreateSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ProviderSerializer(serializers.ModelSerializer):
+    bank = BankSerializer()
 
     class Meta:
         model = Provider
@@ -173,7 +173,6 @@ class IncomeCreateSerializer(serializers.ModelSerializer):
 
 
 class IncomeDetailSerializer(serializers.ModelSerializer):
-
 
     class Meta:
         model = Income

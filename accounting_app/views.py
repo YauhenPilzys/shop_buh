@@ -5,13 +5,33 @@ from rest_framework import viewsets, filters
 from django.http import Http404
 from .paginations import *
 from rest_framework.decorators import action
-from rest_framework.views import APIView
-from rest_framework import status
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework.response import Response
-from .models import *
 from .serializers import *
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
+from rest_framework.response import Response
+from rest_framework import status
 
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+# class ObtainTokenView(TokenObtainPairView):
+#     def post(self, request, *args, **kwargs):
+#         username = request.data.get('username')
+#         password = request.data.get('password')
+#
+#         user = authenticate(request, username=username, password=password)
+#
+#         if user is not None:
+#             refresh = RefreshToken.for_user(user)
+#             response_data = {
+#                 'access': str(refresh.access_token),
+#                 'refresh': str(refresh),
+#             }
+#             return Response(response_data, status=status.HTTP_200_OK)
+#         else:
+#             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class ProviderViewSet(viewsets.ModelViewSet):
@@ -20,12 +40,22 @@ class ProviderViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['provider_name'] #?search
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return ProviderCreateSerializer  #сериализатор для POST-запросов
-        return ProviderDetailSerializer
+    def get_serializer_class(self):          #сериализатор для POST и PATCH-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
+        if self.request.method == 'POST':
+            return ProviderCreateSerializer
+        elif self.request.method == 'PATCH':
+            return ProviderCreateSerializer
+        return ProviderSerializer
+
+
+
+    # def get_serializer_class(self):
+    #     if self.action == 'create':
+    #         return ProviderCreateSerializer  #сериализатор для POST-запросов
+    #     return ProviderDetailSerializer
 
 #Еслли в накладой есть поставщик - TRUE, иначе FALSE  (/api/providers/5/check_invoice)
     @action(detail=True, methods=['GET'])
@@ -62,13 +92,13 @@ class ProviderViewSet(viewsets.ModelViewSet):
 
 
 
-
 class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.all().order_by('-id')
     serializer_class = InvoiceSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['invoice_number', 'provider__provider_name']
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
 
 
@@ -137,11 +167,20 @@ class ClientViewSet(viewsets.ModelViewSet):  #справочник
     filter_backends = [filters.SearchFilter]
     search_fields = ['client_name']
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return ClientCreateSerializer  #сериализатор для POST-запросов
-        return ClientDetailSerializer
+
+    def get_serializer_class(self):          #сериализатор для POST и PATCH-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
+        if self.request.method == 'POST':
+            return ClientCreateSerializer
+        elif self.request.method == 'PATCH':
+            return ClientCreateSerializer
+        return ClientSerializer
+
+    # def get_serializer_class(self):
+    #     if self.action == 'create':
+    #         return ClientCreateSerializer  #сериализатор для POST-запросов
+    #     return ClientDetailSerializer
 
     # Поиск клиента по букве в независимости от регистра и сортировка 5 по ID (api/clients/search_by_name/?name=)
     @action(detail=False, methods=['GET'])
@@ -177,6 +216,9 @@ class ProductViewSet(viewsets.ModelViewSet):  #справочник
     filter_backends = [filters.SearchFilter]
     search_fields = ['product_name']  #?search=AAAA
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
+
+
 
 
 
@@ -228,14 +270,20 @@ class GroupViewSet(viewsets.ModelViewSet): #справочник
     filter_backends = [filters.SearchFilter]
     search_fields = ['group_name']   #?search=AAAA
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
+
+
 
 
 class IncomeViewSet(viewsets.ModelViewSet):
-    queryset = Income.objects.all().order_by('-id')
     serializer_class = IncomeSerializer
+    queryset = Income.objects.all().order_by('-id')
     filter_backends = [filters.SearchFilter]
-    search_fields = ['invoice_id'] #?search=AAAA
+    search_fields = [] #?search=AAAA
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
+
+
 
     def get_serializer_class(
             self):  # сериализатор для POST и PACT-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
@@ -246,19 +294,21 @@ class IncomeViewSet(viewsets.ModelViewSet):
         return IncomeSerializer
 
 
-    def get_queryset(self):   #Поиск по stock_id и invoice_id (api/incomes/invoice_id=655&?stock_id=1344)
-        invoice_id = self.request.query_params.get('invoice_id')
-        stock_id = self.request.query_params.get('stock_id')
+    # работает неверно выдает всю строку
+    # def get_queryset(self):   #Поиск по stock_id и invoice_id (api/incomes/?invoice_id=655&?stock_id=1344)
+    #     invoice_id = self.request.query_params.get('invoice_id')
+    #     stock_id = self.request.query_params.get('stock_id')
+    #
+    #     queryset = Income.objects.all()
+    #
+    #     if invoice_id:
+    #         queryset = queryset.filter(invoice_id=invoice_id)
+    #
+    #     if stock_id:
+    #         queryset = queryset.filter(stock__id=stock_id)
+    #
+    #     return queryset
 
-        queryset = Income.objects.all()
-
-        if invoice_id:
-            queryset = queryset.filter(invoice_id=invoice_id)
-
-        if stock_id:
-            queryset = queryset.filter(stock__id=stock_id)
-
-        return queryset
 
 
 
@@ -321,6 +371,9 @@ class IncomeViewSet(viewsets.ModelViewSet):
     def filter_by_date_and_invoice(self, request):
         queryset = self.get_queryset()
 
+        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
+        page_size = int(request.query_params.get('page_size', 5))
+
         invoice_id = request.query_params.get('invoice_id')
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
@@ -334,8 +387,13 @@ class IncomeViewSet(viewsets.ModelViewSet):
         if end_date:
             queryset = queryset.filter(invoice__product_date__lte=end_date)
 
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        # Делаем пагинацию
+        paginator = PageNumberPagination()
+        paginator.page_size = page_size
+        paginated_queryset = paginator.paginate_queryset(queryset, request)
+
+        serializer = self.get_serializer(paginated_queryset, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 
@@ -372,6 +430,7 @@ class BankViewSet(viewsets.ModelViewSet): #справочник
     filter_backends = [filters.SearchFilter]
     search_fields = ['bank_name']
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
 
 
@@ -410,6 +469,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['']
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
     def get_serializer_class(
             self):  # сериализатор для POST и PATCH-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
@@ -459,6 +519,7 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['']
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
 
 
@@ -478,7 +539,6 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
         if expense_id:
             return Expense_item.objects.filter(expense_id=expense_id)
         return super().get_queryset()
-
 
 
 
@@ -614,15 +674,13 @@ class UpdateStock(APIView):
                     return Response({})
 
 
-
-
 class StockViewSet(viewsets.ModelViewSet):
-
     queryset = Stock.objects.all().order_by('-id')
     serializer_class = StockSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['product__product_name', 'product__id']  #?search=AAAA (имя товара / ID товара)
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
     def retrieve(self, request, *args, **kwargs):
         try:
@@ -781,14 +839,13 @@ class StockViewSet(viewsets.ModelViewSet):
 
 
 
-
-
 class Price_changeViewSet(viewsets.ModelViewSet):
     queryset = Price_change.objects.all().order_by('-id')
     serializer_class = Price_changeSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['income__id'] #?search
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -843,6 +900,7 @@ class RetailViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['']
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -857,6 +915,7 @@ class ContractViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['client__id']    #?search=1
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -902,6 +961,7 @@ class CountryViewSet(viewsets.ModelViewSet):  #справочник
     filter_backends = [filters.SearchFilter]
     search_fields = ['country_name']  #?search=AAAA
     pagination_class = APIListPagination
+    permission_classes = [IsAuthenticated]
 
     # Поиск страны по букве в независимости от регистра и сортировка 5 по ID (api/countries/search_by_name/?name=)
     @action(detail=False, methods=['GET'])

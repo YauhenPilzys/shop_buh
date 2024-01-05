@@ -1,21 +1,5 @@
 from django.db import models
 
-
-
-
-class User(models.Model):
-    username = models.CharField("Имя пользователя", max_length=100)
-    password = models.CharField("Пароль", max_length=100)
-
-    class Meta:
-         verbose_name = "Пользователь"
-         verbose_name_plural = "Пользователи"
-
-    def __str__(self):
-        return self.username
-
-
-
 class Client(models.Model):
     #Клиент справочник
     client_name = models.CharField("Название клиента", max_length=255, blank=False)
