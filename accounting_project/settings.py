@@ -63,13 +63,6 @@ MIDDLEWARE = [
 
 ]
 
-# SIMPLE_JWT = {
-#     "ACCESS_TOKEN_LIFETIME": timedelta(hours=6),
-#     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-#     'USER_ID_FIELD': 'id',
-#     'USER_ID_CLAIM': 'user_id',
-#     'AUTH_HEADER_TYPES': ('Bearer',),
-# }
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=6),
@@ -152,7 +145,7 @@ WSGI_APPLICATION = 'accounting_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'shopalesta',
+        'NAME': 'shop_buh',
         'USER': 'user',
         'PASSWORD': 'Alesta_123',
         'HOST': '127.0.0.1',
