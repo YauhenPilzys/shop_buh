@@ -160,6 +160,7 @@ class Expense(models.Model):
     date_proxy = models.CharField("Дата доверенности", max_length=100, blank=True, null=True)
     proxy_user = models.CharField("Кем выдана довереннось", max_length=100, blank=True, null=True)
     expense_print = models.CharField("Печатана ли накладная", max_length=100, blank=True, null=True)
+    expense_type = models.CharField("Тип", max_length=100, blank=True, null=True)
 
 
 
