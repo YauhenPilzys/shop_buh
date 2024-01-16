@@ -1,6 +1,4 @@
 from rest_framework import serializers
-from rest_framework_simplejwt.tokens import RefreshToken
-
 from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item,\
     Retail, Contract, Country
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -20,6 +18,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['first_name'] = self.user.first_name
         data['last_name'] = self.user.last_name
         return data
+
+class ReportSerializer(serializers.Serializer):
+    provider_id = serializers.IntegerField()
+    provider_name = serializers.CharField()
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    total_expense = serializers.DecimalField(max_digits=10, decimal_places=2)
+    total_income = serializers.DecimalField(max_digits=10, decimal_places=2)
+    balance = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
 
 class BankSerializer(serializers.ModelSerializer):
     class Meta:
@@ -104,12 +113,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
 
 class InvoiceCreateSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Invoice
         fields = '__all__'
 
 
 class InvoiceDetailSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Invoice
         fields = '__all__'
@@ -206,7 +217,7 @@ class Price_changeCreateSerializer(serializers.ModelSerializer):
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
-    client = ClientSerializer()
+    provider = ProviderSerializer()
     class Meta:
         model = Expense
         fields = '__all__'
@@ -223,7 +234,7 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
 
 
 class ExpenseDetailSerializer(serializers.ModelSerializer):
-    client = ClientSerializer()
+    provider = ProviderSerializer()
 
 
 
@@ -304,7 +315,7 @@ class ContractCreateSerializer(serializers.ModelSerializer):
 
 
 class ContractDetailSerializer(serializers.ModelSerializer):
-    client = ClientSerializer()           #get запрос выдает весь список, post - только ID
+    provider = ProviderSerializer()           #get запрос выдает весь список, post - только ID
     class Meta:
         model = Contract
         fields = '__all__'
@@ -316,6 +327,8 @@ class CountrySerializer(serializers.ModelSerializer):
     class Meta:
         model = Country
         fields = '__all__'
+
+
 
 
 

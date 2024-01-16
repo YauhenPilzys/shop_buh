@@ -29,7 +29,6 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
 
-
 schema_view = get_schema_view(
     openapi.Info(
         title="API for SHOP",
@@ -58,6 +57,8 @@ router.register(r'incomes', IncomeViewSet)
 router.register(r'retails', RetailViewSet)
 router.register(r'contracts', ContractViewSet)
 router.register(r'countries', CountryViewSet)
+router.register(r'report', ReportViewSet, basename='report')
+
 
 
 
@@ -72,6 +73,7 @@ urlpatterns = [
     path('api/payment_calculations/<int:prod_id>/', UpdateStock.as_view()),
     path('api/token/',  CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # path('report/', ReportViewSet, name='report'),
 
 ]
 

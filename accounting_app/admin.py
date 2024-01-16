@@ -4,6 +4,7 @@ from django.contrib import admin
 
 
 
+
 admin.site.register(Product)
 admin.site.register(Provider)
 admin.site.register(Client)

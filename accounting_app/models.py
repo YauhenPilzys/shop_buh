@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class Client(models.Model):
     #Клиент справочник
     client_name = models.CharField("Название клиента", max_length=255, blank=False)
@@ -9,7 +10,6 @@ class Client(models.Model):
     client_payment_code = models.CharField("Код платежа", max_length=255)
     bank = models.ForeignKey('Bank', on_delete=models.CASCADE, verbose_name="Банк")
     client_comment = models.TextField("Комментарий", blank=True, null=True)
-
 
     class Meta:
          verbose_name = "Клиент"
@@ -23,15 +23,14 @@ class Client(models.Model):
 
 
 class Provider(models.Model):
-    #Поставщик справочник
-    provider_name = models.CharField("Название поставщика", max_length=255)
+    #Поставщик (контрагент) справочник
+    provider_name = models.CharField("Наименование поставщика", max_length=255)
     provider_phone = models.CharField("Номер телефона", max_length=25)
     provider_address = models.CharField("Адрес", max_length=255)
     provider_unp = models.CharField("УНП", max_length=255)
     provider_payment_code = models.CharField("Код платежа", max_length=255)
     bank = models.ForeignKey('Bank', on_delete=models.CASCADE, verbose_name="Банк")
     provider_comment = models.TextField("Комментарий", blank=True, null=True)
-
 
     class Meta:
         verbose_name = "Поставщик"
@@ -47,10 +46,6 @@ class Product(models.Model):
     product_name = models.CharField("Название", max_length=255)
     product_group = models.ForeignKey('Group', on_delete=models.CASCADE, blank=True, null=True, verbose_name="Группа")
     product_unit = models.CharField("Единица измерения", max_length=10)
-
-
-
-
 
     class Meta:
         verbose_name = "Товар"
@@ -77,14 +72,15 @@ class Group(models.Model):
 
 class Invoice(models.Model):
     #Накладная прихода
-    providers = models.ForeignKey('Provider', on_delete=models.CASCADE, verbose_name="Поставщик")
+    providers = models.ForeignKey('Provider', on_delete=models.PROTECT, verbose_name="Поставщик")
     invoice_number = models.CharField("Номер накладной", max_length=100)
     product_date = models.DateField("Дата поступления ", blank=False)
     product_price = models.CharField("Цена по накладной", max_length=100)
     currency = models.CharField("Валюта", max_length=100, blank=True, null=True)
     product_price_nds = models.CharField("Цена с НДС", max_length=100)
-
-
+    note = models.CharField("Примечание", max_length=100, blank=True, null=True)
+    attribute = models.CharField("Признак", max_length=100, blank=True, null=True)
+    paid = models.BooleanField("Оплачено True/False", default=False, blank=True, null=True)
 
     class Meta:
         verbose_name = "Накладная"
@@ -114,12 +110,10 @@ class Price_change(models.Model):
         return str(self.product)
 
 
-
-
 class Income(models.Model):
     #Приход
-    product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
-    invoice = models.ForeignKey('Invoice', on_delete=models.CASCADE, verbose_name="Накладная")
+    product = models.ForeignKey('Product', on_delete=models.PROTECT, verbose_name="Товар")
+    invoice = models.ForeignKey('Invoice', on_delete=models.PROTECT, verbose_name="Накладная")
     stock = models.ForeignKey('Stock', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Склад")
     product_vendor_providers = models.CharField("Артикул товара поставщика ", max_length=100, blank=True, null=True)
     income_quantity = models.CharField("Количество",  max_length=255)
@@ -132,8 +126,6 @@ class Income(models.Model):
     income_total_price_vat = models.CharField("Полная цена с ндс", max_length=100)
     currency = models.CharField("Валюта", max_length=100, blank=True, null=True)
     income_allowance = models.CharField("Надбавка", max_length=100)
-
-
 
     class Meta:
         verbose_name = "Приход"
@@ -148,7 +140,7 @@ class Income(models.Model):
 
 class Expense(models.Model):
     #Расход
-    client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Клиент")
+    provider = models.ForeignKey('Provider', on_delete=models.PROTECT, verbose_name="Поставщик")
     expense_number = models.CharField("Номер по накладной", max_length=100)
     expense_contract = models.CharField("Номер договора", max_length=100, blank=True, null=True)
     expense_price = models.CharField("Стоимость", max_length=100)
@@ -161,20 +153,19 @@ class Expense(models.Model):
     proxy_user = models.CharField("Кем выдана довереннось", max_length=100, blank=True, null=True)
     expense_print = models.CharField("Печатана ли накладная", max_length=100, blank=True, null=True)
     expense_type = models.CharField("Тип", max_length=100, blank=True, null=True)
-
-
+    expense_sum = models.CharField("Сумма", max_length=100, blank=True, null=True)
 
     class Meta:
         verbose_name = "Расход"
         verbose_name_plural = "Расходы"
 
     def __str__(self):
-        return f"Продано кому: {self.client}  "
+        return f"Продано кому: {self.provider}  "
 
 class Expense_item(models.Model):
-    #Расходная продажи
+    #Расходная продажи ( мы выписываем накладную )
     product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
-    expense = models.ForeignKey('Expense', on_delete=models.CASCADE, verbose_name="Расходная накладная")
+    expense = models.ForeignKey('Expense', on_delete=models.PROTECT, verbose_name="Расходная накладная")
     product_vendor = models.CharField("Артикул товара", max_length=100)
     group = models.ForeignKey('Group', on_delete=models.CASCADE, blank=True, null=True, verbose_name="Группа")
     price_allowance = models.CharField("Цена с надбавкой", max_length=100)
@@ -190,8 +181,6 @@ class Expense_item(models.Model):
     product_discount = models.CharField("Скидка", max_length=100, blank=True, null=True)
     product_stock = models.CharField("Склад", max_length=100, blank=True, null=True)
     note = models.CharField("Примечание", max_length=100, blank=True, null=True)
-
-
 
     class Meta:
 
@@ -221,7 +210,6 @@ class Retail(models.Model):
     date_item = models.DateField("Дата выставления чека")
     #paymant оплата картой или наличными добавить
 
-
     class Meta:
 
         verbose_name = "Розничная торговля"
@@ -250,10 +238,9 @@ class Bank(models.Model):
 
 class Contract(models.Model):
     #Договор
-    client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Kлиент")
+    provider = models.ForeignKey('Provider', on_delete=models.PROTECT, verbose_name="Поставщик")
     contract_number = models.CharField("Номер договора", max_length=100)
     contract_date = models.DateField("Дата договора")
-
 
     class Meta:
         verbose_name = "Договор"
@@ -280,7 +267,6 @@ class Stock(models.Model):
     expense_full_price = models.CharField("Общая цена с ндс", max_length=250, null=True, blank=True)
     product_barcode = models.CharField("Штрихкод", max_length=255)
 
-
     class Meta:
         verbose_name = "Склад"
         verbose_name_plural = "Склад"
@@ -295,13 +281,13 @@ class Stock(models.Model):
 class Country(models.Model):
     country_name = models.CharField("Hазвание страны", max_length=100)
 
-
     class Meta:
         verbose_name = "Страна"
         verbose_name_plural = "Страны"
 
     def __str__(self):
          return self.country_name
+
 
 
 
