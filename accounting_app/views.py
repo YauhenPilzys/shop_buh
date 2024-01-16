@@ -1,8 +1,14 @@
 import functools
+from decimal import Decimal
+
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum, F, ExpressionWrapper, Max, When
+from django.db.models import Sum, Max, F, Case, When, DecimalField
+from django.forms import DecimalField
 from rest_framework import viewsets, filters
-from django.http import Http404
+from django.http import Http404, HttpResponse
+from sqlparse.sql import Case
+
 from .paginations import *
 from rest_framework.decorators import action
 from .serializers import *
@@ -12,26 +18,15 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
 from rest_framework.response import Response
 from rest_framework import status
+from django.db.models import Sum
+from django.db.models.functions import Coalesce, Cast
+from django.db.models import Sum, F, Func, DecimalField
+from django.utils import timezone
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
-# class ObtainTokenView(TokenObtainPairView):
-#     def post(self, request, *args, **kwargs):
-#         username = request.data.get('username')
-#         password = request.data.get('password')
-#
-#         user = authenticate(request, username=username, password=password)
-#
-#         if user is not None:
-#             refresh = RefreshToken.for_user(user)
-#             response_data = {
-#                 'access': str(refresh.access_token),
-#                 'refresh': str(refresh),
-#             }
-#             return Response(response_data, status=status.HTTP_200_OK)
-#         else:
-#             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
 
 
 class ProviderViewSet(viewsets.ModelViewSet):
@@ -132,6 +127,31 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 
 
+    #Поиск в инвосе по provider_name (/invoices/search_by_provider_name/?name=)
+    @action(detail=False, methods=['GET'])
+    def search_by_provider_name(self, request):
+        query = request.query_params.get('name', '')
+
+        # Делаем пагинацию
+        paginator = PageNumberPagination()
+
+        # Получаем количество записей на странице из параметра запроса, по умолчанию 5
+        page_size = int(request.query_params.get('page_size', 5))
+        paginator.page_size = page_size
+
+        if not query:
+            invoices = Invoice.objects.all().order_by('-id')  # Возвращает все записи, если 'name' не задан
+        else:
+            invoices = Invoice.objects.filter(providers__provider_name__iregex=query).order_by('-id')
+
+        # Применяем пагинацию к результатам
+        paginated_invoices = paginator.paginate_queryset(invoices, request)
+
+        serializer = InvoiceSerializer(paginated_invoices, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+
 
 
     # Поиск invoice по invoice_number в независимости от регистра и сортировка 5 по ID (api/invoices/search_by_name/?name=)
@@ -156,6 +176,193 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
         serializer = InvoiceSerializer(paginated_invoices, many=True)
         return paginator.get_paginated_response(serializer.data)
+
+
+
+    # Поиск по параметрам : 1) даты с по, 2) дата с по + поставщик
+    # api/invoices/filter_by_invoice/?start_date=2023-01-01&end_date=2023-12-31&provider_id=10
+    @action(detail=False, methods=['get'])
+    def filter_by_invoice(self, request):
+        queryset = self.get_queryset()
+
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        provider_id = request.query_params.get('provider_id')
+
+        if start_date:
+            queryset = queryset.filter(product_date__gte=start_date)
+
+        if end_date:
+            queryset = queryset.filter(product_date__lte=end_date)
+
+        if provider_id:
+            queryset = queryset.filter(providers_id__id=provider_id)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+
+    #Запрос про сумму по каждому поставщику за дату (http://127.0.0.1:8000/api/invoices/search_by_date_sum/?date=13.01.2024)
+    @action(detail=False, methods=['GET'])
+    def search_by_date_sum(self, request):
+        date_str = self.request.query_params.get('date', None)
+
+        if not date_str:
+            return Response({'error': 'Please provide a valid date in the query parameters.'}, status=400)
+
+        try:
+            date = timezone.datetime.strptime(date_str, '%d.%m.%Y').date()
+        except ValueError:
+            return Response({'error': 'Invalid date format. Please use DD.MM.YYYY.'}, status=400)
+
+        result = (
+            Provider.objects
+            .annotate(
+                total_price=Sum(
+                    'invoice__product_price',
+                    filter=Q(invoice__product_date__lte=date)
+                ),
+                last_product_date=Max('invoice__product_date')
+            )
+            .filter(
+                Q(total_price__gt=0) |
+                Q(last_product_date=date)
+            )
+            .values('id', 'provider_name', 'total_price', 'last_product_date')
+        )
+
+        response_data = []
+
+        for entry in result:
+            provider_id = entry['id']
+
+            # Get the invoices for the current provider within the specified date range
+            invoices = Invoice.objects.filter(providers_id=provider_id)
+
+            # Преобразование CharField в числа и суммирование для продуктов в диапазоне введенной даты
+            total_product_price = sum(
+                float(invoice.product_price) if invoice.product_price and invoice.product_date <= date else 0
+                for invoice in invoices
+            )
+
+            response_data.append({'provider_id': provider_id, 'provider_name': entry['provider_name'],
+                                  'product_price': total_product_price})
+
+        return Response(response_data)
+
+
+
+    #запрос с даты по дату + поставщик+ сумма до этой даты (http://127.0.0.1:8000/api/invoices/search_by_date_sum_provider/?date=13.01.2024&provider_id=1)
+
+    @action(detail=False, methods=['GET'])
+    def search_by_date_sum_provider(self, request):
+        date_str = self.request.query_params.get('date', None)
+        provider_id = self.request.query_params.get('provider_id', None)
+
+        if not date_str:
+            return Response({'error': 'Please provide a valid date in the query parameters.'}, status=400)
+
+        try:
+            date = timezone.datetime.strptime(date_str, '%d.%m.%Y').date()
+        except ValueError:
+            return Response({'error': 'Invalid date format. Please use DD.MM.YYYY.'}, status=400)
+
+        # Получаем сумму для каждого поставщика по всем записям
+        result = (
+            Provider.objects
+            .annotate(
+                total_price=Sum('invoice__product_price'),
+                last_product_date=Max('invoice__product_date')
+            )
+            .filter(
+                Q(total_price__gt=0) |
+                Q(last_product_date=date)
+            )
+        )
+
+        if provider_id:
+            result = result.filter(id=provider_id)
+
+        response_data = []
+
+        for entry in result.values('id', 'provider_name', 'total_price', 'last_product_date'):
+            provider_id = entry['id']
+
+            # Получаем сумму для текущего поставщика только до введенной даты
+            invoices = Invoice.objects.filter(providers_id=provider_id, product_date__lt=date)
+
+            total_product_price = sum(
+                Decimal(invoice.product_price) if invoice.product_price else Decimal('0.0')
+                for invoice in invoices
+            )
+
+            response_data.append({
+                'provider_id': provider_id,
+                'provider_name': entry['provider_name'],
+                'product_price': total_product_price
+            })
+
+        return Response(response_data)
+
+
+    #С даты по дату выводит цену поставщика и дату
+    #http://127.0.0.1:8000/api/invoices/search_by_date_provider/?start_date=11.01.2024&end_date=20.01.2024&provider_id=1
+
+    @action(detail=False, methods=['GET'])
+    def search_by_date_provider(self, request):
+        start_date_str = self.request.query_params.get('start_date', None)
+        end_date_str = self.request.query_params.get('end_date', None)
+        provider_id = self.request.query_params.get('provider_id', None)
+
+        if not start_date_str or not end_date_str:
+            return Response({'error': 'Please provide valid start_date and end_date in the query parameters.'},
+                            status=400)
+
+        try:
+            start_date = timezone.datetime.strptime(start_date_str, '%d.%m.%Y').date()
+            end_date = timezone.datetime.strptime(end_date_str, '%d.%m.%Y').date()
+        except ValueError:
+            return Response({'error': 'Invalid date format. Please use DD.MM.YYYY.'}, status=400)
+
+        # Запрос для получения записей для каждого поставщика в заданном диапазоне дат
+        result = (
+            Provider.objects
+            .filter(invoice__product_date__range=(start_date, end_date))
+            .distinct()
+            .values('id', 'provider_name')
+        )
+
+        if provider_id:
+            result = result.filter(id=provider_id)
+
+        response_data = []
+
+        for entry in result:
+            current_provider_id = entry['id']
+
+            # Получаем записи для текущего поставщика в указанном диапазоне дат
+            invoices = Invoice.objects.filter(
+                providers_id=current_provider_id,
+                product_date__range=(start_date, end_date)
+            )
+
+            # Создаем список записей для текущего поставщика
+            invoices_data = [
+                {
+                    'product_date': invoice.product_date,
+                    'product_price': Decimal(invoice.product_price) if invoice.product_price else None
+                }
+                for invoice in invoices
+            ]
+
+            response_data.append({
+                'provider_id': current_provider_id,
+                'provider_name': entry['provider_name'],
+                'invoices': invoices_data
+            })
+
+        return Response(response_data)
 
 
 
@@ -332,7 +539,7 @@ class IncomeViewSet(viewsets.ModelViewSet):
 
 
 
-     # Поиск получить где параметрами будут : 1) даты с по, 2) дата с по + клиент, 3) дата с по + товар, 4)дата с по + клиент + товар
+     # Поиск получить где параметрами будут : 1) даты с по, 2) дата с по + поставщик, 3) дата с по + товар, 4)дата с по + поставщик + товар
      # (incomes/filter_by_income/?start_date=2023-01-01&end_date=2023-12-31&providers_id=2&product_id=1)
     @action(detail=False, methods=['get'])
     def filter_by_income(self, request):
@@ -511,8 +718,199 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
 
 
+    # Поиск по параметрам : 1) даты с по, 2) дата с по + поставщик
+    # expenses/filter_by_expense/?start_date=2023-01-01&end_date=2023-12-31&provider_id=10
+    @action(detail=False, methods=['get'])
+    def filter_by_expense(self, request):
+        queryset = self.get_queryset()
+
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        provider_id = request.query_params.get('provider_id')
 
 
+        if start_date:
+            queryset = queryset.filter(expense_date__gte=start_date)
+
+        if end_date:
+            queryset = queryset.filter(expense_date__lte=end_date)
+
+        if provider_id:
+            queryset = queryset.filter(provider__id=provider_id)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+
+      #поиск по поставщику и сумма expense_sum
+
+    # Запрос про сумму по каждому поставщику за дату (http://127.0.0.1:8000/api/expenses/search_by_date_sum/?date=13.01.2024)
+    @action(detail=False, methods=['GET'])
+    def search_by_date_sum(self, request):
+        date_str = self.request.query_params.get('date', None)
+
+        if not date_str:
+            return Response({'error': 'Please provide a valid date in the query parameters.'}, status=400)
+
+        try:
+            date = timezone.datetime.strptime(date_str, '%d.%m.%Y').date()
+        except ValueError:
+            return Response({'error': 'Invalid date format. Please use DD.MM.YYYY.'}, status=400)
+
+        result = (
+            Provider.objects
+            .annotate(
+                total_price=Sum(
+                    'expense__expense_sum',
+                    filter=Q(expense__expense_date__lte=date)
+                ),
+                last_expense_date=Max('expense__expense_date')
+            )
+            .filter(
+                Q(total_price__gt=0) |
+                Q(last_expense_date=date)
+            )
+            .values('id', 'provider_name', 'total_price', 'last_expense_date')
+        )
+
+        response_data = []
+
+        for entry in result:
+            provider_id = entry['id']
+
+            # Get the expenses for the current provider within the specified date range
+            expenses = Expense.objects.filter(provider_id=provider_id, expense_date__lte=date)
+
+            # Convert CharField to numbers and sum for expenses in the specified date range
+            total_expense_sum = sum(
+                float(expense.expense_sum) if expense.expense_sum else 0
+                for expense in expenses
+            )
+
+            response_data.append({
+                'provider_id': provider_id,
+                'provider_name': entry['provider_name'],
+                'expense_sum': total_expense_sum
+            })
+
+        return Response(response_data)
+
+    #запрос с даты по дату + поставщик+ сумма до этой даты
+    #(http://127.0.0.1:8000/api/expenses/search_by_date_sum_provider/?date=13.01.2024&provider_id=1)
+    @action(detail=False, methods=['GET'])
+    def search_by_date_sum_provider(self, request):
+        date_str = self.request.query_params.get('date', None)
+        provider_id = self.request.query_params.get('provider_id', None)
+
+        if not date_str:
+            return Response({'error': 'Please provide a valid date in the query parameters.'}, status=400)
+
+        try:
+            date = timezone.datetime.strptime(date_str, '%d.%m.%Y').date()
+        except ValueError:
+            return Response({'error': 'Invalid date format. Please use DD.MM.YYYY.'}, status=400)
+
+        # Получаем сумму для каждого поставщика по всем записям
+        result = (
+            Provider.objects
+            .annotate(
+                total_price=Sum('expense__expense_sum'),
+                last_expense_date=Max('expense__expense_date')
+            )
+            .filter(
+                Q(total_price__gt=0) |
+                Q(last_expense_date=date)
+            )
+        )
+
+        if provider_id:
+            result = result.filter(id=provider_id)
+
+        response_data = []
+
+        for entry in result.values('id', 'provider_name', 'total_price', 'last_expense_date'):
+            provider_id = entry['id']
+
+            # Получаем сумму для текущего поставщика только до введенной даты
+            expenses = Expense.objects.filter(provider_id=provider_id, expense_date__lt=date)
+
+            total_expense_sum = sum(
+                Decimal(expense.expense_sum) if expense.expense_sum else Decimal('0.0')
+                for expense in expenses
+            )
+
+            response_data.append({
+                'provider_id': provider_id,
+                'provider_name': entry['provider_name'],
+                'expense_sum': total_expense_sum
+            })
+
+        return Response(response_data)
+
+    # С даты по дату выводит цену поставщика и дату
+    # http://127.0.0.1:8000/api/expenses/search_by_date_provider/?start_date=11.01.2024&end_date=20.01.2024&provider_id=1
+
+    @action(detail=False, methods=['GET'])
+    def search_by_date_provider(self, request):
+        start_date_str = self.request.query_params.get('start_date', None)
+        end_date_str = self.request.query_params.get('end_date', None)
+        provider_id = self.request.query_params.get('provider_id', None)
+
+        if not start_date_str or not end_date_str:
+            return Response({'error': 'Please provide valid start_date and end_date in the query parameters.'},
+                            status=400)
+
+        try:
+            start_date = timezone.datetime.strptime(start_date_str, '%d.%m.%Y').date()
+            end_date = timezone.datetime.strptime(end_date_str, '%d.%m.%Y').date()
+        except ValueError:
+            return Response({'error': 'Invalid date format. Please use DD.MM.YYYY.'}, status=400)
+
+        # Запрос для получения записей для каждого поставщика в заданном диапазоне дат
+        result = (
+            Provider.objects
+            .filter(expense__expense_date__range=(start_date, end_date))
+            .distinct()
+            .values('id', 'provider_name')
+        )
+
+        if provider_id:
+            result = result.filter(id=provider_id)
+
+        response_data = []
+
+        for entry in result:
+            current_provider_id = entry['id']
+
+            # Получаем записи для текущего поставщика в указанном диапазоне дат
+            expenses = Expense.objects.filter(
+                provider_id=current_provider_id,
+                expense_date__range=(start_date, end_date)
+            )
+
+            # Создаем список записей для текущего поставщика
+            expense_data = [
+                {
+                    'expense_date': expense.expense_date,
+                    'expense_sum': Decimal(expense.expense_sum) if expense.expense_sum else None
+                }
+                for expense in expenses
+            ]
+
+            response_data.append({
+                'provider_id': current_provider_id,
+                'provider_name': entry['provider_name'],
+                'expenses': expense_data
+            })
+
+        return Response(response_data)
+
+
+
+
+
+   
 class Expense_itemViewSet(viewsets.ModelViewSet):
     queryset = Expense_item.objects.all().order_by('-id')
     serializer_class = Expense_itemSerializer
@@ -534,23 +932,34 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
 
 
 
-    def get_queryset(self): #Поиск расхода по id_накладной расхода (api/expenses_item/?expense_id=1)
-        expense_id = self.request.query_params.get('expense_id')
+    # def get_queryset(self): #Поиск расхода по id_накладной расхода (api/expenses_item/?expense_id=1)
+    #     expense_id = self.request.query_params.get('expense_id')
+    #     if expense_id:
+    #         return Expense_item.objects.filter(expense_id=expense_id)
+    #     return super().get_queryset()
+
+    def list(self, request, *args, **kwargs): #Поиск расхода по id_накладной расхода (api/expenses_item/?expense_id=1 без пагинации)
+        expense_id = request.query_params.get('expense_id')
+
         if expense_id:
-            return Expense_item.objects.filter(expense_id=expense_id)
-        return super().get_queryset()
+            queryset = Expense_item.objects.filter(expense_id=expense_id)
+        else:
+            queryset = self.filter_queryset(self.get_queryset())
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 
-    #Поиск по параметрам : 1) даты с по, 2) дата с по + клиент, 3) дата с по + товар, 4)дата с по + клиент + товар
-    # filter_by_expense_item/?start_date=2023-01-01&end_date=2023-12-31&client_id=10&product_id=94
+    #Поиск по параметрам : 1) даты с по, 2) дата с по + поставщик, 3) дата с по + товар, 4)дата с по + клиент + товар
+    # filter_by_expense_item/?start_date=2023-01-01&end_date=2023-12-31&provider_id=10&product_id=94
     @action(detail=False, methods=['get'])
     def filter_by_expense_item(self, request):
         queryset = self.get_queryset()
 
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
-        client_id = request.query_params.get('client_id')
+        provider_id = request.query_params.get('provider_id')
         product_id = request.query_params.get('product_id')
 
         if start_date:
@@ -559,8 +968,8 @@ class Expense_itemViewSet(viewsets.ModelViewSet):
         if end_date:
             queryset = queryset.filter(expense__expense_date__lte=end_date)
 
-        if client_id:
-            queryset = queryset.filter(expense__client__id=client_id)
+        if provider_id:
+            queryset = queryset.filter(expense__provider__id=provider_id)
 
         if product_id:
             queryset = queryset.filter(product__id=product_id)
@@ -931,16 +1340,16 @@ class ContractViewSet(viewsets.ModelViewSet):
 
 
 
-   #Поиск по двум параметрам где номер контракта по цифре все данные,или есть пустой запрос то весь список выдает (api/contracts/search_by_client_and_number/?client_id=4&contract_number=1234)
+   #Поиск по двум параметрам где номер контракта по цифре все данные,или есть пустой запрос то весь список выдает (api/contracts/search_by_client_and_number/?provider_id=4&contract_number=1234)
     @action(detail=False, methods=['GET'])
     def search_by_client_and_number(self, request):
-        client_id = request.query_params.get('client_id')
+        provider_id = request.query_params.get('provider_id')
         contract_number = request.query_params.get('contract_number')
 
-        if not client_id:
-            return Response({"message": "Не указан параметр client_id"}, status=status.HTTP_400_BAD_REQUEST)
+        if not provider_id:
+            return Response({"message": "Не указан параметр provider_id"}, status=status.HTTP_400_BAD_REQUEST)
 
-        contracts = Contract.objects.filter(client_id=client_id)
+        contracts = Contract.objects.filter(provider_id=provider_id)
 
         if contract_number:
             contracts = contracts.filter(contract_number__icontains=contract_number)

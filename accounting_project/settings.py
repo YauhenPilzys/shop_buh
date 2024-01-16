@@ -103,6 +103,9 @@ CORS_ALLOWED_ORIGINS = [
   "http://store.alesta.group:80",
   "http://store.alesta.group",
   "http://localhost:127.0.0.1:8000",
+  "http://buch.alesta.group:80",
+  "http://buch.alesta.group",
+  "http://127.0.0.1:8000",
 ]
 
 # Разрешения средств (если используются учетные данные)

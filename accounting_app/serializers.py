@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
-
 from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item,\
     Retail, Contract, Country
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -104,12 +103,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
 
 class InvoiceCreateSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Invoice
         fields = '__all__'
 
 
 class InvoiceDetailSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Invoice
         fields = '__all__'
@@ -206,7 +207,7 @@ class Price_changeCreateSerializer(serializers.ModelSerializer):
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
-    client = ClientSerializer()
+    provider = ProviderSerializer()
     class Meta:
         model = Expense
         fields = '__all__'
@@ -223,7 +224,7 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
 
 
 class ExpenseDetailSerializer(serializers.ModelSerializer):
-    client = ClientSerializer()
+    provider = ProviderSerializer()
 
 
 
@@ -304,7 +305,7 @@ class ContractCreateSerializer(serializers.ModelSerializer):
 
 
 class ContractDetailSerializer(serializers.ModelSerializer):
-    client = ClientSerializer()           #get запрос выдает весь список, post - только ID
+    provider = ProviderSerializer()           #get запрос выдает весь список, post - только ID
     class Meta:
         model = Contract
         fields = '__all__'
@@ -316,6 +317,8 @@ class CountrySerializer(serializers.ModelSerializer):
     class Meta:
         model = Country
         fields = '__all__'
+
+
 
 
 

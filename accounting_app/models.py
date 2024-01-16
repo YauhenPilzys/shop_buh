@@ -23,14 +23,18 @@ class Client(models.Model):
 
 
 class Provider(models.Model):
-    #Поставщик справочник
-    provider_name = models.CharField("Название поставщика", max_length=255)
+    #Поставщик (контрагент) справочник
+    provider_name = models.CharField("Наименование поставщика", max_length=255)  #Наименование
     provider_phone = models.CharField("Номер телефона", max_length=25)
     provider_address = models.CharField("Адрес", max_length=255)
     provider_unp = models.CharField("УНП", max_length=255)
     provider_payment_code = models.CharField("Код платежа", max_length=255)
     bank = models.ForeignKey('Bank', on_delete=models.CASCADE, verbose_name="Банк")
     provider_comment = models.TextField("Комментарий", blank=True, null=True)
+    #номер договора - страна - Валюта - Наши реквизиты - Номер наших реквизитов - примечание (комментарий) -
+    #язык - остаточк на начало года - почтовый адрес - примечание к агенту - эл почта - на основании -
+    # должность - ФИО - Должность в род падеже - ФИО в род падеже
+    # галочки - Нужна печать, компакт. инв. - обяз. примеч. - счет на перевоз. - не отпр. письмл - не указ. перевозч. в счет
 
 
     class Meta:
@@ -148,7 +152,7 @@ class Income(models.Model):
 
 class Expense(models.Model):
     #Расход
-    client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Клиент")
+    provider = models.ForeignKey('Provider', on_delete=models.CASCADE, verbose_name="Поставщик")
     expense_number = models.CharField("Номер по накладной", max_length=100)
     expense_contract = models.CharField("Номер договора", max_length=100, blank=True, null=True)
     expense_price = models.CharField("Стоимость", max_length=100)
@@ -161,6 +165,7 @@ class Expense(models.Model):
     proxy_user = models.CharField("Кем выдана довереннось", max_length=100, blank=True, null=True)
     expense_print = models.CharField("Печатана ли накладная", max_length=100, blank=True, null=True)
     expense_type = models.CharField("Тип", max_length=100, blank=True, null=True)
+    expense_sum = models.CharField("Сумма", max_length=100, blank=True, null=True)
 
 
 
@@ -169,10 +174,10 @@ class Expense(models.Model):
         verbose_name_plural = "Расходы"
 
     def __str__(self):
-        return f"Продано кому: {self.client}  "
+        return f"Продано кому: {self.provider}  "
 
 class Expense_item(models.Model):
-    #Расходная продажи
+    #Расходная продажи ( мы выписываем накладную )
     product = models.ForeignKey('Product', on_delete=models.CASCADE, verbose_name="Товар")
     expense = models.ForeignKey('Expense', on_delete=models.CASCADE, verbose_name="Расходная накладная")
     product_vendor = models.CharField("Артикул товара", max_length=100)
@@ -250,7 +255,7 @@ class Bank(models.Model):
 
 class Contract(models.Model):
     #Договор
-    client = models.ForeignKey('Client', on_delete=models.CASCADE, verbose_name="Kлиент")
+    provider = models.ForeignKey('Provider', on_delete=models.CASCADE, verbose_name="Поставщик")
     contract_number = models.CharField("Номер договора", max_length=100)
     contract_date = models.DateField("Дата договора")
 
@@ -302,6 +307,7 @@ class Country(models.Model):
 
     def __str__(self):
          return self.country_name
+
 
 
 
