@@ -21,3 +21,4 @@ admin.site.register(Contract)
 admin.site.register(Country)
 
 
+

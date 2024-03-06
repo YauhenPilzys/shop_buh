@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework_simplejwt.tokens import RefreshToken
 from .models import Client, Product, Provider, Group, Invoice, Bank, Expense, Stock, Price_change, Income, Expense_item,\
     Retail, Contract, Country
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
