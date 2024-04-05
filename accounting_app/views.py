@@ -24,9 +24,11 @@ import openpyxl
 from openpyxl.styles import Alignment
 from io import BytesIO
 from django.http import HttpResponse
-from datetime import datetime
+from datetime import datetime, timedelta
 from openpyxl.styles import Border, Side
 from openpyxl.styles import Font
+from django.utils.timezone import make_aware
+from rest_framework.exceptions import NotFound
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -454,6 +456,12 @@ class ProviderViewSet(viewsets.ModelViewSet):
         return paginator.get_paginated_response(serializer.data)
 
 
+
+
+
+
+
+
 class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.all().order_by('-id')
     serializer_class = InvoiceSerializer
@@ -470,6 +478,147 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return InvoiceSerializer
 
 
+
+    # ОТЧЕТ - Поиск с даты по дату + поставщик чтобы выводило поставщика с invoice - никуда не ставим его
+    # api/invoices/bank_report/?start_date=2024-01-01&end_date=2024-03-01&provider_id=1
+    @action(detail=False, methods=['get'])
+    def bank_report(self, request):
+        # Получаем данные от и до даты и идентификатор поставщика из параметров запроса
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        provider_id = request.query_params.get('provider_id')
+
+        # Преобразуем даты из строкового формата в объекты datetime
+        start_date = datetime.strptime(start_date, '%Y-%m-%d')
+        end_date = datetime.strptime(end_date, '%Y-%m-%d')
+
+        if provider_id:
+            # Получаем поставщика по его идентификатору
+            provider = Provider.objects.get(pk=provider_id)
+
+            # Получаем все накладные прихода для данного поставщика в заданном диапазоне дат
+            invoices = Invoice.objects.filter(providers=provider, product_date__range=[start_date, end_date]).values(
+                'invoice_number', 'product_date', 'product_price', 'currency', 'product_price_nds', 'note', 'attribute',
+                'paid')
+
+            # Преобразуем QuerySet в список словарей
+            invoices_list = list(invoices)
+
+            # Формируем словарь с данными о поставщике
+            provider_data = {
+                "id": provider.id,
+                "provider_name": provider.provider_name,
+            }
+
+            # Объединяем данные о поставщике с каждой накладной
+            for invoice in invoices_list:
+                invoice['providers'] = provider_data
+
+        else:
+            # Возвращаем пустой массив
+            invoices_list = []
+
+        # Возвращаем результат в виде словаря с ключом "result", содержащим массив с данными
+        return Response({"results": invoices_list})
+
+
+
+    # в инвойсе вводим с даты по дату и выводим поставщика выводит  product_price по каждому поставщику
+    # http://127.0.0.1:8000/api/invoices/invoice_report/?start_date=2024-01-01&end_date=2024-12-31&provider_id=1
+    @action(detail=False, methods=['get'])
+    def invoice_report(self, request):
+        # Получаем даты "с" и "по" из параметров запроса
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        provider_id = request.query_params.get('provider_id')
+
+        if start_date and end_date:
+            try:
+                if provider_id:
+                    # Если указан идентификатор поставщика, получаем его
+                    provider = Provider.objects.get(pk=provider_id)
+                    invoices = Invoice.objects.filter(providers=provider, product_date__range=(start_date, end_date))
+
+                    # Формируем список данных о каждой найденной накладной
+                    response_data = []
+                    total_product_price = 0
+                    for invoice in invoices:
+                        product_price = float(invoice.product_price)
+                        invoice_data = {
+                            "provider_id": provider.id,
+                            "provider_name": provider.provider_name,
+                            "product_date": invoice.product_date,
+                            "total_product_price": '{:.2f}'.format(product_price),
+                            # Добавьте другие поля накладной, которые вам нужны
+                        }
+                        response_data.append(invoice_data)
+                        total_product_price += product_price
+
+                    # Возвращаем результат вместе с общей суммой
+                    paginator = APIListPagination()
+                    result_page = paginator.paginate_queryset(response_data, request)
+
+                    # Вычисляем сумму product_price на текущей странице
+                    total_page_price = sum(float(item['total_product_price']) for item in result_page)
+
+                    return Response({
+                        "count": paginator.page.paginator.count,
+                        "next": paginator.get_next_link(),
+                        "previous": paginator.get_previous_link(),
+                        "results": result_page,
+                        "total_all_providers": '{:.2f}'.format(total_product_price),
+                        "total_page_price": '{:.2f}'.format(total_page_price)
+                    })
+
+                else:
+                    # Если идентификатор поставщика не указан, получаем все уникальные поставщики за указанный период
+                    providers = Provider.objects.filter(invoice__product_date__range=(start_date, end_date)).distinct()
+
+                    # Инициализируем список для хранения данных по всем поставщикам
+                    response_data = []
+
+                    # Для каждого поставщика вычисляем общий product_price за найденные накладные и добавляем данные в список
+                    for provider in providers:
+                        total_price = round(
+                            Invoice.objects.filter(providers=provider, product_date__range=(start_date, end_date))
+                            .aggregate(total_price=Sum('product_price'))['total_price'] or 0, 2)
+
+                        provider_data = {
+                            "provider_id": provider.id,
+                            "provider_name": provider.provider_name,
+                            "total_product_price": '{:.2f}'.format(total_price),
+                        }
+
+                        response_data.append(provider_data)
+
+                    # Вычисляем общую сумму за указанный период для всех поставщиков
+                    total_all_providers = round(
+                        Invoice.objects.filter(product_date__range=(start_date, end_date))
+                        .aggregate(total_price=Sum('product_price'))['total_price'] or 0, 2)
+
+                    # Добавляем отдельную запись с общей суммой
+                    paginator = APIListPagination()
+                    result_page = paginator.paginate_queryset(response_data, request)
+
+                    # Вычисляем сумму product_price на текущей странице
+                    total_page_price = sum(float(item['total_product_price']) for item in result_page)
+
+                    return Response({
+                        "count": paginator.page.paginator.count,
+                        "next": paginator.get_next_link(),
+                        "previous": paginator.get_previous_link(),
+                        "results": result_page,
+                        "total_all_providers": '{:.2f}'.format(total_all_providers),
+                        "total_page_price": '{:.2f}'.format(total_page_price)
+                    })
+
+            except Provider.DoesNotExist:
+                # Если указан некорректный идентификатор поставщика, возвращаем ошибку
+                return Response({"error": "Provider does not exist."}, status=status.HTTP_404_NOT_FOUND)
+
+        else:
+            # Если не все параметры указаны, возвращаем пустой массив
+            return Response({"results": []})
 
     # Запрос на поиск записей по атрибуту и сортировка по дате (сразу выводим записи с атрибутом и потом все остальные)
     # http://127.0.0.1:8000/api/invoices/filter_by_attribute/?attribute=плюс
@@ -502,7 +651,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 
     # Сортировка sort= product_price / provider_name / product_date
-    # /api/invoices/filter_by_sort/?product_date=true (false)  /  product_price / provider_name
+    # /api/invoices/filter_by_sort/?product_date=true (false)  /  product_price / provider_name /
     @action(detail=False, methods=['GET'])
     def filter_by_sort(self, request, *args, **kwargs):
         provider_name_order = self.request.query_params.get('provider_name', None)
@@ -639,13 +788,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 
      # Поиск с даты по дату и сумму по каждому поставщику
-     # http://127.0.0.1:8000/api/invoices/search_by_date_sum/?start_date=01.01.2024&end_date=31.12.2024
+     # http://127.0.0.1:8000/api/invoices/search_by_date_sum/?start_date=2024-01-01&end_date=2024-12-31
     @action(detail=False, methods=['GET'])
     def search_by_date_sum(self, request):
         # Получаем значения параметров 'start_date' и 'end_date' из запроса
         start_date_str = self.request.query_params.get('start_date', None)
         end_date_str = self.request.query_params.get('end_date', None)
-
         # Если оба параметра отсутствуют, возвращаем все строки без фильтрации по дате
         if not start_date_str and not end_date_str:
             result = (
@@ -675,6 +823,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     'product_price': '{:.2f}'.format(total_product_price),
                     'start_date': None,
                     'end_date': None,
+                    'last_product_date': entry['last_product_date'].strftime('%d.%m.%Y') if entry[
+                        'last_product_date'] else None
                 })
 
             return Response(response_data)
@@ -695,44 +845,36 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         result = (
             Provider.objects
             .annotate(
-                total_price=Sum(
-                    'invoice__product_price',
-                    filter=Q(invoice__product_date__range=(start_date, end_date))
-                ),
                 last_product_date=Max('invoice__product_date')
             )
             .filter(
-                Q(total_price__gt=0) |
                 Q(last_product_date__range=(start_date, end_date))
             )
-            .values('id', 'provider_name', 'total_price', 'last_product_date')
+            .values('id', 'provider_name', 'last_product_date')
         )
 
-        # Подготавливаем данные для ответа
         response_data = []
 
-        # Обрабатываем результаты запроса
         for entry in result:
             provider_id = entry['id']
+            last_product_date = entry['last_product_date']
 
-            # Получаем счета для текущего поставщика в указанном диапазоне дат
-            invoices = Invoice.objects.filter(providers_id=provider_id)
+            # Получаем счета для текущего поставщика с указанным временным интервалом
+            invoices = Invoice.objects.filter(providers_id=provider_id, product_date__range=(start_date, end_date))
 
-            # Преобразование CharField в числа и суммирование для продуктов в диапазоне введенной даты
+            # Вычисляем product_price только для счетов с указанным временным интервалом
             total_product_price = sum(
-                Decimal(invoice.product_price) if (
-                        invoice.product_date and start_date <= invoice.product_date <= end_date
-                ) else Decimal(0)
+                Decimal(invoice.product_price)
                 for invoice in invoices
             )
 
-            # Добавляем данные в список ответа
             response_data.append({
                 'provider_id': provider_id,
                 'provider_name': entry['provider_name'],
                 'product_price': '{:.2f}'.format(total_product_price),
-                'start_date': start_date.strftime('%d.%m.%Y') if start_date else None,
-                'end_date': end_date.strftime('%d.%m.%Y') if end_date else None,
+                'last_product_date': last_product_date,
+                'start_date': start_date,
+                'end_date': end_date
             })
 
         return Response(response_data)
@@ -1080,6 +1222,18 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     pagination_class = APIListPagination
     permission_classes = [IsAuthenticated]
 
+
+    # Если в expense есть такой xpense_number то - TRUE , иначе - FALSE
+    # http://127.0.0.1:8000/api/expenses/check_expense_number/?expense_number=23
+    @action(detail=False, methods=['get'])
+    def check_expense_number(self, request):
+        expense_number = request.query_params.get('expense_number')
+        if expense_number:
+            expense_exists = Expense.objects.filter(expense_number=expense_number).exists()
+            return Response({'exists': expense_exists}, status=status.HTTP_200_OK)
+        else:
+            return Response({'exists': False}, status=status.HTTP_200_OK)
+
     def get_serializer_class(
             self):  # сериализатор для POST и PATCH-запросов (GET показывает весь список, POST оставляет ID ключа другой таблицы)
         if self.request.method == 'POST':
@@ -1087,6 +1241,52 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         elif self.request.method == 'PATCH':
             return ExpenseCreateSerializer
         return ExpenseSerializer
+
+
+
+    # поиск в Expense и поставщику с даты по дату и общая сумма expense_sum ( в инвойсе сделано по другому)
+    # http://127.0.0.1:8000/api/expenses/expense_report/?start_date=2024-01-01&end_date=2024-12-31&provider_id=1
+    @action(detail=False, methods=['get'])
+    def expense_report(self, request):
+        # Получаем даты "с" и "по" из параметров запроса
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        provider_id = request.query_params.get('provider_id')
+
+        if provider_id and start_date_str and end_date_str:
+            try:
+                # Получаем поставщика по его идентификатору
+                provider = Provider.objects.get(pk=provider_id)
+
+                # Преобразуем строки дат "с" и "по" в объекты datetime
+                start_date = make_aware(datetime.strptime(start_date_str, '%Y-%m-%d'))
+                end_date = make_aware(datetime.strptime(end_date_str, '%Y-%m-%d'))
+
+                # Получаем все расходы для данного поставщика в заданном периоде
+                expenses = Expense.objects.filter(provider=provider, expense_date__range=(start_date, end_date)).values(
+                    'expense_sum', 'currency', 'expense_date')
+
+                # Вычисляем сумму expense_sum за найденные расходы и округляем до двух знаков после запятой
+                total_expense = round(expenses.aggregate(total_expense=Sum('expense_sum'))['total_expense'] or 0, 2)
+
+                # Формируем словарь с данными о поставщике и суммой расходов
+                response_data = {
+                    "provider_id": provider.id,
+                    "provider_name": provider.provider_name,
+                    "total_expense_sum": '{:.2f}'.format(total_expense),
+                }
+
+                return Response(response_data)
+
+            except Provider.DoesNotExist:
+                # Если поставщика не существует, возвращаем пустой массив
+                return Response([])
+
+        else:
+            # Если не все параметры указаны, возвращаем пустой массив
+            return Response([])
+
+
 
     # Поиск с даты по дату по двум параметрам + пагинация
     # http://127.0.0.1:8000/api/expenses/?date=false (true)
@@ -1108,13 +1308,14 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
 
     # Сортировка sort= product_price / provider_name / product_date
-    # /api/expenses/filter_by_sort/?expense_date=True (False)  /  expense_sum / provider_name
+    # /api/expenses/filter_by_sort/?expense_date=True (False)  /  expense_sum / provider_name / expense_number
     @action(detail=False, methods=['GET'])
     def filter_by_sort(self, request, *args, **kwargs):
         # Получение параметров запроса для сортировки
         provider_name_order = self.request.query_params.get('provider_name', None)
         expense_date_order = self.request.query_params.get('expense_date', None)
         expense_sum_order = self.request.query_params.get('expense_sum', None)
+        expense_number_order = self.request.query_params.get('expense_number', None)  # Добавлено 02.04
 
         # Получение изначального набора данных
         queryset = self.get_queryset().order_by('-id')
@@ -1136,6 +1337,11 @@ class ExpenseViewSet(viewsets.ModelViewSet):
             queryset = queryset.annotate(
                 expense_sum_int=Cast(F('expense_sum'), IntegerField())
             ).order_by(f'{expense_sum_ordering}expense_sum_int')
+
+        # Если указан параметр expense_number, выполняется сортировка по номеру расхода
+        if expense_number_order is not None:
+            expense_number_ordering = '' if expense_number_order.lower() == 'true' else '-'
+            queryset = queryset.order_by(f'{expense_number_ordering}expense_number')  # Добавлено
 
         # Настройка пагинации
         paginator = PageNumberPagination()
@@ -1300,8 +1506,8 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                 'provider_id': provider_id,
                 'provider_name': entry['provider_name'],
                 'expense_sum': '{:.2f}'.format(total_expense_sum),
-                'start_date': start_date.strftime('%d.%m.%Y') if start_date else None,
-                'end_date': end_date.strftime('%d.%m.%Y') if end_date else None,
+                'start_date': start_date,
+                'end_date': end_date
             })
 
         return Response(response_data)

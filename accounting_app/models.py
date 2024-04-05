@@ -25,7 +25,6 @@ class Client(models.Model):
 class Provider(models.Model):
     #Поставщик (контрагент) справочник
     provider_name = models.CharField("Наименование поставщика", max_length=255)
-    provider_name = models.CharField("Наименование поставщика", max_length=255)  #Наименование
     provider_phone = models.CharField("Номер телефона", max_length=25)
     provider_address = models.CharField("Адрес", max_length=255)
     provider_unp = models.CharField("УНП", max_length=255)
@@ -146,7 +145,6 @@ class Income(models.Model):
 class Expense(models.Model):
     #Расход
     provider = models.ForeignKey('Provider', on_delete=models.PROTECT, verbose_name="Поставщик")
-    provider = models.ForeignKey('Provider', on_delete=models.CASCADE, verbose_name="Поставщик")
     expense_number = models.CharField("Номер по накладной", max_length=100)
     expense_contract = models.CharField("Номер договора", max_length=100, blank=True, null=True)
     expense_price = models.CharField("Стоимость", max_length=100)
@@ -240,7 +238,6 @@ class Bank(models.Model):
 class Contract(models.Model):
     #Договор
     provider = models.ForeignKey('Provider', on_delete=models.PROTECT, verbose_name="Поставщик")
-    provider = models.ForeignKey('Provider', on_delete=models.CASCADE, verbose_name="Поставщик")
     contract_number = models.CharField("Номер договора", max_length=100)
     contract_date = models.DateField("Дата договора")
 
